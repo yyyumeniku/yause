@@ -436,41 +436,32 @@ public class GuiIngameMenuVoxelBox extends GuiIngameMenu {
 
         // Optional playtime stat below the title (FTBU-only)
         if (VoxelMenuConfig.showPlaytime && this.mc.player != null && com.thevoxelbox.yause.VoxelMenu.ftbUtilitiesInstalled) {
-            try {
-                int statsX = boxX + 14;
-                int titleHeightPx = (int)(this.fontRenderer.FONT_HEIGHT * 2.0f);
-                int playY = titleY + titleHeightPx + 6;
-                // Read and display cached FTBU play ticks value (refreshed periodically).
-                // If a cached FTBU reading isn't present, fall back to the base value that was
-                // taken at menu open. Only skip drawing when *both* are missing.
-                if (this.cachedFTBUPlayTicks == null && this.basePlayTicks < 0L) {
-                    // no usable FTBU value available yet (we do NOT fall back to vanilla) — skip drawing playtime
+            int statsX = boxX + 14;
+            int titleHeightPx = (int)(this.fontRenderer.FONT_HEIGHT * 2.0f);
+            int playY = titleY + titleHeightPx + 6;
+
+            // Prefer cached FTBU play ticks, otherwise use the base (taken at menu open) if available
+            Long baseTicksObj = (this.cachedFTBUPlayTicks != null) ? this.cachedFTBUPlayTicks : (this.basePlayTicks >= 0L ? Long.valueOf(this.basePlayTicks) : null);
+
+            if (baseTicksObj == null) {
+                if (!ftbuPlaytimeMissingLogged) {
+                    ftbuPlaytimeMissingLogged = true;
+                    com.thevoxelbox.yause.VoxelMenu.LOGGER.info("Yause: FTBU playtime not available in menu (no FTBU value present). ftbUtilitiesInstalled={}, ftbuInitTried={}, ftbuUnavailableLogged={}", com.thevoxelbox.yause.VoxelMenu.ftbUtilitiesInstalled, ftbuInitTried, ftbuUnavailableLogged);
+                }
+            } else {
+                long baseTicks = baseTicksObj.longValue();
+                if (baseTicks < 0L) {
                     if (!ftbuPlaytimeMissingLogged) {
                         ftbuPlaytimeMissingLogged = true;
-                        com.thevoxelbox.yause.VoxelMenu.LOGGER.info("Yause: FTBU playtime not available in menu (no FTBU value present). ftbUtilitiesInstalled={}, ftbuInitTried={}, ftbuUnavailableLogged={}", com.thevoxelbox.yause.VoxelMenu.ftbUtilitiesInstalled, ftbuInitTried, ftbuUnavailableLogged);
+                        com.thevoxelbox.yause.VoxelMenu.LOGGER.info("Yause: FTBU playtime not available (base ticks < 0). Skipping display.");
                     }
                 } else {
-                    // Show a live "time lapse" while the pause menu is open by adding
-                    // sessionPlayTicks to the cached/base number of ticks so the display
-                    // reflects the most recent data.
-                    long baseTicks = this.cachedFTBUPlayTicks == null ? this.basePlayTicks : this.cachedFTBUPlayTicks.longValue();
-                    if (baseTicks < 0L) {
-                        // No FTBU base value exists; don't display playtime
-                        if (!ftbuPlaytimeMissingLogged) {
-                            ftbuPlaytimeMissingLogged = true;
-                            com.thevoxelbox.yause.VoxelMenu.LOGGER.info("Yause: FTBU playtime not available (base ticks < 0). Skipping display.");
-                        }
-                    } else {
-                        long playTicks = baseTicks + this.sessionPlayTicks;
-                    long playSeconds = playTicks / 20L; // ticks -> seconds
+                    long playTicks = baseTicks + this.sessionPlayTicks;
+                    long playSeconds = playTicks / 20L;
                     String playtimeStr = formatPlaytime(playSeconds);
-                    int infoColor = (int) (0xCC * openProgress) << 24 | 0x999999; // slightly dimmed with open progress
-                    // Playtime logging is intentionally one-time and not repeated every frame.
+                    int infoColor = (int) (0xCC * openProgress) << 24 | 0x999999;
                     this.fontRenderer.drawStringWithShadow(playtimeStr, statsX, playY, infoColor);
                 }
-                
-            } catch (Exception ignored) {
-                // don't fail the menu if the stat isn't available
             }
         }
 
@@ -867,7 +858,14 @@ public class GuiIngameMenuVoxelBox extends GuiIngameMenu {
     }
 }
 
-}
+
+
+
+
+
+
+
+
 
 
 
