@@ -1,0 +1,494 @@
+/**
+ * It is advised that you do not edit anything in the build.gradle; unless you are sure of what you are doing
+ */
+import com.gtnewhorizons.retrofuturagradle.mcp.InjectTagsTask
+import org.jetbrains.changelog.Changelog
+import org.jetbrains.gradle.ext.Gradle
+
+plugins {
+    id 'java'
+    id 'java-library'
+    id 'maven-publish'
+    id 'org.jetbrains.gradle.plugin.idea-ext' version '1.1.9'
+    id 'com.gtnewhorizons.retrofuturagradle' version '1.4.1'
+    id 'com.matthewprenger.cursegradle' version '1.4.0' apply false
+    id 'com.modrinth.minotaur' version '2.+' apply false
+    id 'org.jetbrains.changelog' version '2.2.1'
+}
+
+apply from: 'gradle/scripts/helpers.gradle'
+
+// Print helpful message if Gradle is running on Java 8 or older (plugins like org.jetbrains.changelog require Java 11+)
+if (!JavaVersion.current().isJava11Compatible()) {
+    println '\n[Gradle runtime check] Gradle is running under Java ' + JavaVersion.current() + '.'
+    println 'Some Gradle plugins used by this project require Java 11 or newer to resolve and configure.'
+    println 'If you see plugin resolution errors (Example: \"org.jetbrains.changelog\" requires Java 11), run Gradle using a Java 11+ runtime for the build step:'
+    println ''
+    println '    export JAVA_HOME=$(/usr/libexec/java_home -v 11)'
+    println '    ./gradlew runClient'
+    println ''
+    println 'You can still keep the runClient toolchain set to Java 8 for Minecraft runtime tasks.'
+}
+
+// Gradle's Groovy runtime sometimes fails to load newer class file formats (example: Java 25 compiled plugin JARs).
+// If this build is running under a Java runtime newer than Java 17, instruct the user to run Gradle with Java 17
+// to avoid Groovy "Unsupported class file major version" errors.
+def javaVersion = System.getProperty('java.version')
+def majorVersion = { v ->
+    try {
+        if (v.startsWith('1.')) {
+            return Integer.parseInt(v.split('\\.')[1])
+        }
+        return Integer.parseInt(v.split('\\.')[0])
+    } catch (Exception e) { return -1 }
+}(javaVersion)
+if (majorVersion > 17) {
+    println "\n[Gradle runtime check] Gradle is running under Java ${javaVersion}."
+    println 'This workspace expects the build to run with Java 17 for best Gradle/Groovy compatibility.'
+    println 'Please set the JAVA_HOME environment variable to your Java 17 installation and re-run Gradle.'
+    println 'Example (macOS):\n    export JAVA_HOME=$(/usr/libexec/java_home -v 17)\n    ./gradlew runClient'
+    throw new GradleException('Please run Gradle using Java 17 to avoid "Unsupported class file major version" build errors.')
+}
+
+// Early Assertions
+assertProperty 'mod_version'
+assertProperty 'root_package'
+assertProperty 'mod_id'
+assertProperty 'mod_name'
+
+assertSubProperties 'use_tags', 'tag_class_name'
+assertSubProperties 'use_access_transformer', 'access_transformer_locations'
+assertSubProperties 'use_mixins', 'mixin_booter_version', 'mixin_refmap'
+assertSubProperties 'is_coremod', 'coremod_includes_mod', 'coremod_plugin_class_name'
+assertSubProperties 'use_asset_mover', 'asset_mover_version'
+
+setDefaultProperty 'use_modern_java_syntax', false, false
+setDefaultProperty 'generate_sources_jar', true, false
+setDefaultProperty 'generate_javadocs_jar', true, false
+setDefaultProperty 'mapping_channel', true, 'stable'
+setDefaultProperty 'mapping_version', true, '39'
+setDefaultProperty 'use_dependency_at_files', true, true
+setDefaultProperty 'minecraft_username', true, 'Developer'
+setDefaultProperty 'extra_jvm_args', false, ''
+setDefaultProperty 'extra_tweak_classes', false, ''
+setDefaultProperty 'change_minecraft_sources', false, false
+
+version = propertyString('mod_version')
+group = propertyString('root_package')
+
+base {
+    archivesName.set(propertyString('mod_id'))
+}
+
+tasks.decompressDecompiledSources.enabled !propertyBool('change_minecraft_sources')
+
+java {
+    toolchain {
+        languageVersion.set(JavaLanguageVersion.of(propertyBool('use_modern_java_syntax') ? 16 : 8))
+        // Azul covers the most platforms for Java 8 toolchains, crucially including MacOS arm64
+        vendor.set(JvmVendorSpec.AZUL)
+    }
+    if (propertyBool('generate_sources_jar')) {
+        withSourcesJar()
+    }
+    if (propertyBool('generate_javadocs_jar')) {
+        withJavadocJar()
+    }
+}
+
+configurations {
+    embed
+    implementation.extendsFrom(embed)
+}
+
+minecraft {
+    mcVersion.set('1.12.2')
+
+    mcpMappingChannel.set(propertyString('mapping_channel'))
+    mcpMappingVersion.set(propertyString('mapping_version'))
+
+    useDependencyAccessTransformers.set(propertyBool('use_dependency_at_files'))
+
+    username.set(propertyString('minecraft_username'))
+    
+    // Add any additional tweaker classes here
+    extraTweakClasses.addAll(propertyStringList('extra_tweak_classes'))
+
+    // Add various JVM arguments here for runtime
+    def args = ['-ea:' + group]
+    if (propertyBool('use_mixins')) {
+        args << '-Dmixin.hotSwap=true'
+        args << '-Dmixin.checks.interfaces=true'
+        args << '-Dmixin.debug.export=true'
+    }
+    extraRunJvmArguments.addAll(args)
+    extraRunJvmArguments.addAll(propertyStringList('extra_jvm_args'))
+
+    if (propertyBool('use_tags')) {
+        if (file('tags.properties').exists()) {
+            Properties props = new Properties().tap {  it.load(file('tags.properties').newInputStream()); it }
+            if (!props.isEmpty()) {
+                injectedTags.set(props.collectEntries { k, v -> [(k): interpolate(v)] })
+            }
+        }
+    }
+}
+
+// Hot swap / debug support: Run with `./gradlew -PhotSwap runClient`
+// This adds JDWP & HotswapAgent JVM args so you can use DCEVM / HotswapAgent for live reloads.
+gradle.taskGraph.whenReady { graph ->
+    if (project.hasProperty('hotSwap')) {
+        tasks.matching { it.name == 'runClient' }.all { task ->
+            // Configuring runClient for HotSwap (JDWP + HotswapAgent)
+            // append JDWP debug options and HotswapAgent javaagent
+            def hotswapJar = System.getProperty('user.home') + '/.hotswap/hotswap-agent.jar'
+            def hotswapJarFile = new File(hotswapJar)
+            // Decide what JVM args to use depending on the Java version we are running Gradle with
+            def javaVersionProperty = System.getProperty('java.version')
+            def majorVer
+            if (javaVersionProperty == null) {
+                majorVer = -1
+            } else if (javaVersionProperty.startsWith('1.')) {
+                majorVer = Integer.parseInt(javaVersionProperty.split('\\.')[1])
+            } else {
+                majorVer = Integer.parseInt(javaVersionProperty.split('\\.')[0])
+            }
+            // Detected Java version (parsed): ${majorVer} from ${javaVersionProperty}
+            // If the runClient task defines a specific javaLauncher (toolchain), prefer that version info
+            def runLauncherVersion = null
+            if (task.hasProperty('javaLauncher') && task.javaLauncher.isPresent()) {
+                try {
+                    def launcherMetadata = task.javaLauncher.get().metadata
+                    runLauncherVersion = launcherMetadata.languageVersion.asInt()
+                    // runClient javaLauncher metadata available
+                } catch (Exception e) {
+                    // Failed to read task.javaLauncher metadata: ${e.message}
+                }
+            }
+            if (runLauncherVersion != null) {
+                majorVer = runLauncherVersion
+                println "Using javaLauncher languageVersion for decision: ${majorVer}"
+            }
+            def jdwpAddress = majorVer >= 9 ? '*:5005' : '5005'
+            if (majorVer == 8) {
+                // For Java 8: DCEVM installs as alternative JVM; use -XXaltjvm and hotswap agent if DCEVM is available
+                def useDCEVM = false
+                if (task.hasProperty('javaLauncher') && task.javaLauncher.isPresent()) {
+                    try {
+                        def home = task.javaLauncher.get().metadata.javaHome
+                        def javaHomeFile = home instanceof File ? home : new File(home.toString())
+                        def dcevmPath1 = new File(javaHomeFile, 'jre/lib/dcevm/libjvm.dylib')
+                        def dcevmPath2 = new File(javaHomeFile, 'lib/dcevm/libjvm.dylib')
+                        if (dcevmPath1.exists() || dcevmPath2.exists()) {
+                            useDCEVM = true
+                        }
+                    } catch (Exception e) {
+                        println "Failed to probe javaLauncher.javaHome for DCEVM: ${e.message}"
+                    }
+                }
+                if (useDCEVM) {
+                    task.jvmArgs += ['-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=' + jdwpAddress, '-XXaltjvm=dcevm']
+                } else {
+                    // DCEVM not detected in Java 8 toolchain; adding JDWP only.
+                    task.jvmArgs += ['-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=' + jdwpAddress]
+                }
+                if (hotswapJarFile.exists()) {
+                    task.jvmArgs += ['-javaagent:' + hotswapJar]
+                } else {
+                    // HotswapAgent JAR not found at ${hotswapJar}; skipping -javaagent.
+                }
+            } else {
+                // For Java 11/17/21: use enhanced flags for redefinition + HotswapAgent
+                task.jvmArgs += ['-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=' + jdwpAddress, '-XX:+AllowEnhancedClassRedefinition', '-XX:HotswapAgent=fatjar']
+                if (hotswapJarFile.exists()) {
+                    task.jvmArgs += ['-javaagent:' + hotswapJar]
+                } else {
+                    // HotswapAgent JAR not found at ${hotswapJar}; skipping -javaagent.
+                }
+            }
+            // Disable mixin hotSwap checks to avoid false positives
+            task.jvmArgs += ['-Dmixin.hotSwap=true']
+            // Appended runClient JVM args
+        }
+    }
+}
+
+// runClientHotSwap convenience task for developer hotswapping & debugging
+tasks.register('runClientHotSwap') {
+    group = 'application'
+    description = 'Run the client with HotSwapAgent/DCEVM enabled (will spawn a nested Gradle run with -PhotSwap runClient).'
+    doLast {
+        println 'Launching hot-swapped client: ./gradlew -PhotSwap runClient'
+        def command = ['./gradlew', '-PhotSwap', 'runClient']
+        if (System.getProperty('os.name').toLowerCase().contains('windows')) {
+            command = ['cmd', '/c'] + command
+        }
+        exec {
+            workingDir '.'
+            commandLine command
+            standardOutput = System.out
+            errorOutput = System.err
+        }
+    }
+}
+
+repositories {
+    maven {
+        name 'CleanroomMC Maven'
+        url 'https://maven.cleanroommc.com'
+    }
+}
+
+dependencies {
+    if (propertyBool('use_modern_java_syntax')) {
+        annotationProcessor 'com.github.bsideup.jabel:jabel-javac-plugin:1.0.0'
+        // Workaround for https://github.com/bsideup/jabel/issues/174
+        annotationProcessor 'net.java.dev.jna:jna-platform:5.13.0'
+        compileOnly ('com.github.bsideup.jabel:jabel-javac-plugin:1.0.0') {
+            transitive = false
+        }
+        // Allow jdk.unsupported classes like sun.misc.Unsafe, workaround for JDK-8206937 and fixes crashes in tests
+        patchedMinecraft 'me.eigenraven.java8unsupported:java-8-unsupported-shim:1.0.0'
+        // Include for tests
+        testAnnotationProcessor 'com.github.bsideup.jabel:jabel-javac-plugin:1.0.0'
+        testCompileOnly('com.github.bsideup.jabel:jabel-javac-plugin:1.0.0') {
+            transitive = false // We only care about the 1 annotation class
+        }
+    }
+    if (propertyBool('use_asset_mover')) {
+        implementation "com.cleanroommc:assetmover:${propertyString('asset_mover_version')}"
+    }
+    if (propertyBool('use_mixins')) {
+        String mixin = modUtils.enableMixins("zone.rong:mixinbooter:${propertyString('mixin_booter_version')}", propertyString('mixin_refmap'))
+        api (mixin) {
+            transitive = false
+        }
+        annotationProcessor 'org.ow2.asm:asm-debug-all:5.2'
+        annotationProcessor 'com.google.guava:guava:32.1.2-jre'
+        annotationProcessor 'com.google.code.gson:gson:2.8.9'
+        annotationProcessor (mixin) {
+            transitive = false
+        }
+    }
+    if (propertyBool('enable_junit_testing')) {
+        testImplementation 'org.junit.jupiter:junit-jupiter:5.7.1'
+        testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+    }
+}
+
+apply from: 'gradle/scripts/dependencies.gradle'
+
+// Adds Access Transformer files to tasks
+if (propertyBool('use_access_transformer')) {
+    for (def location : propertyStringList('access_transformer_locations')) {
+        def fileLocation = file("${projectDir}/src/main/resources/${location}")
+        if (fileLocation.exists()) {
+            tasks.deobfuscateMergedJarToSrg.accessTransformerFiles.from(fileLocation)
+            tasks.srgifyBinpatchedJar.accessTransformerFiles.from(fileLocation)
+        } else {
+            throw new GradleException("Access Transformer file [$fileLocation] does not exist!")
+        }
+    }
+}
+
+processResources {
+
+    inputs.property 'mod_id', propertyString('mod_id')
+    inputs.property 'mod_name', propertyString('mod_name')
+    inputs.property 'mod_version', propertyString('mod_version')
+    inputs.property 'mod_description', propertyString('mod_description')
+    inputs.property 'mod_authors', "${propertyStringList('mod_authors', ',').join(', ')}"
+    inputs.property 'mod_credits', propertyString('mod_credits')
+    inputs.property 'mod_url', propertyString('mod_url')
+    inputs.property 'mod_update_json', propertyString('mod_update_json')
+    inputs.property 'mod_logo_path', propertyString('mod_logo_path')
+    inputs.property 'mixin_refmap', propertyString('mixin_refmap')
+    inputs.property 'mixin_package', propertyString('mixin_package')
+    inputs.property 'mixin_configs', propertyStringList('mixin_configs').join(' ')
+
+    def filterList = ['mcmod.info', 'pack.mcmeta']
+    filterList.addAll(propertyStringList('mixin_configs').collect { config -> "mixins.${config}.json" as String })
+
+    filesMatching(filterList) { fcd ->
+        fcd.expand(
+                'mod_id': propertyString('mod_id'),
+                'mod_name': propertyString('mod_name'),
+                'mod_version': propertyString('mod_version'),
+                'mod_description': propertyString('mod_description'),
+                'mod_authors': "${propertyStringList('mod_authors', ',').join(', ')}",
+                'mod_credits': propertyString('mod_credits'),
+                'mod_url': propertyString('mod_url'),
+                'mod_update_json': propertyString('mod_update_json'),
+                'mod_logo_path': propertyString('mod_logo_path'),
+                'mixin_refmap': propertyString('mixin_refmap'),
+                'mixin_package': propertyString('mixin_package')
+        )
+    }
+    
+    if (propertyBool('use_access_transformer')) {
+        rename '(.+_at.cfg)', 'META-INF/$1'
+    }
+
+}
+
+jar {
+    manifest {
+        def attribute_map = [:]
+        if (propertyBool('is_coremod')) {
+            attribute_map['FMLCorePlugin'] = propertyString('coremod_plugin_class_name')
+            if (propertyBool('coremod_includes_mod')) {
+                attribute_map['FMLCorePluginContainsFMLMod'] = true
+                def currentTasks = gradle.startParameter.taskNames
+                if (currentTasks[0] == 'build' || currentTasks[0] == 'prepareObfModsFolder' || currentTasks[0] == 'runObfClient') {
+                    attribute_map['ForceLoadAsMod'] = true
+                }
+            }
+        }
+        if (propertyBool('use_access_transformer')) {
+            attribute_map['FMLAT'] = propertyString('access_transformer_locations')
+        }
+        attributes(attribute_map)
+    }
+    // Add all embedded dependencies into the jar
+    from(provider{ configurations.embed.collect {it.isDirectory() ? it : zipTree(it)} })
+}
+
+idea {
+    module {
+        inheritOutputDirs = true
+    }
+    project {
+        settings {
+            runConfigurations {
+                "1. Run Client"(Gradle) {
+                    taskNames = ["runClient"]
+                }
+                "2. Run Server"(Gradle) {
+                    taskNames = ["runServer"]
+                }
+                "3. Run Obfuscated Client"(Gradle) {
+                    taskNames = ["runObfClient"]
+                }
+                "4. Run Obfuscated Server"(Gradle) {
+                    taskNames = ["runObfServer"]
+                }
+            }
+            compiler.javac {
+                afterEvaluate {
+                    javacAdditionalOptions = "-encoding utf8"
+                    moduleJavacAdditionalOptions = [
+                            (project.name + ".main"): tasks.compileJava.options.compilerArgs.collect { '"' + it + '"' }.join(' ')
+                    ]
+                }
+            }
+        }
+    }
+}
+
+// Temporarily disable and skip configuring the default 'test' task to avoid configuration issues while we run the client.
+compileTestJava {
+    sourceCompatibility = targetCompatibility = 8
+}
+
+// Note: The `test` task has historically been configured to use JUnitPlatform and a toolchain.
+// In some environments, the default test task instantiation causes a TypeNotPresentException in Gradle's
+// DefaultReportContainer code path. This disables the test task so we can continue to build/run the game client.
+// Please re-enable tests for CI or developer environments once the Gradle/plugin compatibility issues are resolved.
+test {
+    useJUnitPlatform()
+    javaLauncher.set(javaToolchains.launcherFor {
+        languageVersion = JavaLanguageVersion.of(8)
+    })
+    if (propertyBool('show_testing_output')) {
+        testLogging {
+            showStandardStreams = true
+        }
+    }
+}
+
+String parserChangelog() {
+    if (!file('CHANGELOG.md').exists()) {
+        throw new GradleException('publish_with_changelog is true, but CHANGELOG.md does not exist in the workspace!')
+    }
+    String parsedChangelog = changelog.renderItem(
+            changelog.get(propertyString('mod_version')).withHeader(false).withEmptySections(false),
+            Changelog.OutputType.MARKDOWN)
+    if (parsedChangelog.isEmpty()) {
+        throw new GradleException('publish_with_changelog is true, but the changelog for the latest version is empty!')
+    }
+    return parsedChangelog
+}
+
+tasks.register('generateMixinJson') {
+    group 'cleanroom helpers'
+    def missingConfig = propertyStringList('mixin_configs').findAll { config -> !file("src/main/resources/mixins.${config}.json").exists() }
+    onlyIf {
+        if (propertyBool('use_mixins') && propertyBool('generate_mixins_json')) {
+            return !missingConfig.empty
+        }
+        return false
+    }
+    doLast {
+        for (String mixinConfig : missingConfig) {
+            def file = file("src/main/resources/mixins.${mixinConfig}.json")
+            file << """{\n\t"package": "",\n\t"required": true,\n\t"refmap": "${propertyString('mixin_refmap')}",\n\t"target": "@env(DEFAULT)",\n\t"minVersion": "0.8.5",\n\t"compatibilityLevel": "JAVA_8",\n\t"mixins": [],\n\t"server": [],\n\t"client": []\n}"""
+        }
+    }
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+    if (propertyBool('use_modern_java_syntax')) {
+        if (it.name in ['compileMcLauncherJava', 'compilePatchedMcJava']) {
+            return
+        }
+        sourceCompatibility = 17
+        options.release.set(8)
+        javaCompiler.set(javaToolchains.compilerFor {
+            languageVersion.set(JavaLanguageVersion.of(16))
+            vendor.set(JvmVendorSpec.AZUL)
+        })
+    }
+}
+
+tasks.register('cleanroomAfterSync') {
+    group 'cleanroom helpers'
+    dependsOn 'injectTags', 'generateMixinJson'
+}
+
+if (propertyBool('use_modern_java_syntax')) {
+    tasks.withType(Javadoc).configureEach {
+        sourceCompatibility = 17
+    }
+}
+
+tasks.named('injectTags', InjectTagsTask).configure {
+    onlyIf {
+        return propertyBool('use_tags') && !it.getTags().get().isEmpty()
+    }
+    it.outputClassName.set(propertyString('tag_class_name'))
+}
+
+tasks.named('prepareObfModsFolder').configure {
+    finalizedBy 'prioritizeCoremods'
+}
+
+tasks.register('prioritizeCoremods') {
+    dependsOn 'prepareObfModsFolder'
+    doLast {
+        fileTree('run/obfuscated').forEach {
+            if (it.isFile() && it.name =~ '(mixinbooter|configanytime)(-)([0-9])+\\.+([0-9])+(.jar)') {
+                it.renameTo(new File(it.parentFile, "!${it.name}"))
+            }
+        }
+    }
+}
+
+idea.project.settings {
+    taskTriggers {
+        afterSync 'cleanroomAfterSync'
+    }
+}
+
+apply from: 'gradle/scripts/publishing.gradle'
+apply from: 'gradle/scripts/extra.gradle'
