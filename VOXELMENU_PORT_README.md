@@ -1,6 +1,8 @@
-# VoxelMenu - Forge 1.12.2 Port
+# VoxelMenu (Legacy) - See Yause
 
-A complete port of the VoxelMenu mod from LiteLoader 1.7.10 to Forge 1.12.2, combining both the VoxelMenu and VoxelMenuMusic mods into a single unified mod.
+This repository has been rebranded and updated. The project previously known as "VoxelMenu" is now published as **Yause**.
+
+Please see YAUSE_PORT_README.md for the current port and maintenance information.
 
 ## Overview
 
@@ -9,12 +11,10 @@ VoxelMenu now focuses on enhancing the in-game / pause menu with improved button
  - **Custom Buttons** - Lightweight controls for modular in-menu buttons
  - **Server Integration** - Right-click favorite server to edit
 
-## Original Credits
+## Original Credits (Retained)
 
-- **Original Author**: Mumfrey
-- **Original Team**: VoxelModPack Team
-- **Music Artists**: eXtaticus, ph00tbag, FelixMoog
-- **Port**: Ported to Forge 1.12.2 from LiteLoader 1.7.10
+- **Original Author**: Mumfrey (original VoxelMenu)
+- **Port**: Ported to Forge 1.12.2 (now maintained under Yause)
 
 ## Features Ported
 

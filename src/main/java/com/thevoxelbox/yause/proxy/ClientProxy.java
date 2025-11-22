@@ -17,7 +17,7 @@ public class ClientProxy extends CommonProxy {
         // Initialize configuration
         VoxelMenuConfig.init(event.getSuggestedConfigurationFile());
         
-        VoxelMenu.LOGGER.info("VoxelMenu client pre-initialization complete");
+        VoxelMenu.LOGGER.info("Yause client pre-initialization complete");
     }
     
     @Override
@@ -27,13 +27,13 @@ public class ClientProxy extends CommonProxy {
         // Register event handlers
         MinecraftForge.EVENT_BUS.register(new GuiEventHandler());
         
-        VoxelMenu.LOGGER.info("VoxelMenu client initialization complete");
+        VoxelMenu.LOGGER.info("Yause client initialization complete");
     }
     
     @Override
     public void postInit(FMLPostInitializationEvent event) {
         super.postInit(event);
         
-        VoxelMenu.LOGGER.info("VoxelMenu client post-initialization complete");
+        VoxelMenu.LOGGER.info("Yause client post-initialization complete");
     }
 }

@@ -21,7 +21,7 @@ public class VoxelMenuModCore {
     }
     
     public String getName() {
-        return "VoxelMenu";
+        return "Yause";
     }
     
     public void init() {
