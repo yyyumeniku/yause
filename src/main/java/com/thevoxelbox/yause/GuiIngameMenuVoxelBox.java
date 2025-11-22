@@ -625,7 +625,12 @@ public class GuiIngameMenuVoxelBox extends GuiIngameMenu {
                 // FTBU method pieces are missing — nothing we can do
                 if (!ftbuUnavailableLogged) {
                     ftbuUnavailableLogged = true;
-                    com.thevoxelbox.yause.VoxelMenu.LOGGER.debug("FTBU reflection not available — playtime via FTBU will be disabled");
+                    com.thevoxelbox.yause.VoxelMenu.LOGGER.info("FTBU reflection not available — playtime via FTBU will be disabled (universeClass={}, universeGet={}, universeGetPlayer={}, forgePlayerClass={}, forgePlayerStaticGetter={})",
+                            ftbuUniverseClass == null ? "<null>" : ftbuUniverseClass.getName(),
+                            ftbuUniverseGet == null ? "<null>" : ftbuUniverseGet.getName(),
+                            ftbuUniverseGetPlayer == null ? "<null>" : ftbuUniverseGetPlayer.getName(),
+                            ftbuForgePlayerClass == null ? "<null>" : ftbuForgePlayerClass.getName(),
+                            ftbuForgePlayerStaticGetter == null ? "<null>" : ftbuForgePlayerStaticGetter.getName());
                 }
                 return null;
             }
@@ -659,7 +664,14 @@ public class GuiIngameMenuVoxelBox extends GuiIngameMenu {
                 }
             }
 
-            if (forgePlayer == null) return null;
+            if (forgePlayer == null) {
+                // Log detailed probe state when forgePlayer can't be resolved
+                com.thevoxelbox.yause.VoxelMenu.LOGGER.info("FTBU: forgePlayer lookup returned null (universe={}, getPlayerMethod={}, staticGetter={})",
+                        ftbuUniverseClass == null ? "<null>" : ftbuUniverseClass.getName(),
+                        ftbuUniverseGetPlayer == null ? "<null>" : ftbuUniverseGetPlayer == null ? "<null>" : ftbuUniverseGetPlayer.getName(),
+                        ftbuForgePlayerStaticGetter == null ? "<null>" : ftbuForgePlayerStaticGetter.getName());
+                return null;
+            }
 
             Object stats = ftbuStatsMethod.invoke(forgePlayer);
 
@@ -710,6 +722,14 @@ public class GuiIngameMenuVoxelBox extends GuiIngameMenu {
             }
 
             if (val == null) {
+                // If stats object is null or val is null, log more details so we can diagnose missing method names
+                if (stats == null) {
+                    com.thevoxelbox.yause.VoxelMenu.LOGGER.info("FTBU: stats object is null (forgePlayerClass={}, statsMethod={})",
+                            ftbuForgePlayerClass == null ? "<null>" : ftbuForgePlayerClass.getName(),
+                            ftbuStatsMethod == null ? "<null>" : ftbuStatsMethod.getName());
+                } else {
+                    com.thevoxelbox.yause.VoxelMenu.LOGGER.info("FTBU: stats object present but stat read returned null (statsClass={})", stats.getClass().getName());
+                }
                 // If we can't read a playtime value, dump the probe info once — this helps diagnose "works in vanilla but not with mods" cases
                 if (!ftbuProbeDumpLogged) {
                     ftbuProbeDumpLogged = true;
