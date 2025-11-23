@@ -1,0 +1,31 @@
+name: Gradle 9 + Java 25 CI (upgrade validation)
+
+on:
+  push:
+    branches: [ feature/gradle9-upgrade ]
+  pull_request:
+    branches: [ feature/gradle9-upgrade ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+
+      - name: Grant execute for gradlew
+        run: chmod +x ./gradlew
+
+      - name: Print Java and Gradle info
+        run: |-
+          java -version
+          ./gradlew --version || true
+
+      - name: Build (wrapper + compile)
+        run: ./gradlew build -x test --console=plain
