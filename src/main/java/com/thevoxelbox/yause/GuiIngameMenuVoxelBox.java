@@ -226,40 +226,54 @@ public class GuiIngameMenuVoxelBox extends GuiIngameMenu {
             net.minecraft.stats.StatBase stat = net.minecraft.stats.StatList.PLAY_ONE_MINUTE;
             if (stat == null) return null;
 
+            // Try the direct API first (MCP mapping): StatFileWriter.readStat(StatBase)
+            try {
+                Object statsManagerDirect = this.mc.player.getStatFileWriter();
+                if (statsManagerDirect != null) {
+                    try {
+                        java.lang.reflect.Method readStat = statsManagerDirect.getClass().getMethod("readStat", net.minecraft.stats.StatBase.class);
+                        Object val = readStat.invoke(statsManagerDirect, stat);
+                        if (val instanceof Number) return ((Number) val).longValue();
+                        if (val != null) return Long.parseLong(val.toString());
+                    } catch (NoSuchMethodException | IllegalAccessException | java.lang.reflect.InvocationTargetException e) {
+                        // fall through to reflection approach below
+                    }
+                }
+            } catch (Throwable ignored) {
+                // fall through to reflection approach below
+            }
+
             Object statsManager = null;
             try {
-                // Normal access (MCP mapping): getStatFileWriter()
-                statsManager = this.mc.player.getStatFileWriter();
-            } catch (Throwable ignored) {
-                // If the mapping differs, try reflection on a likely field name
-                try {
-                    java.lang.reflect.Field f = this.mc.player.getClass().getDeclaredField("statFileWriter");
-                    f.setAccessible(true);
-                    statsManager = f.get(this.mc.player);
-                } catch (Throwable ignored2) { }
-            }
+                // fallback: try to access likely field names via reflection
+                java.lang.reflect.Field f = this.mc.player.getClass().getDeclaredField("statFileWriter");
+                f.setAccessible(true);
+                statsManager = f.get(this.mc.player);
+            } catch (Throwable ignored2) { }
 
             if (statsManager == null) return null;
 
-            try {
-                java.lang.reflect.Method readStat = statsManager.getClass().getMethod("readStat", net.minecraft.stats.StatBase.class);
-                Object val = readStat.invoke(statsManager, stat);
-                if (val instanceof Number) return ((Number) val).longValue();
-                if (val != null) return Long.parseLong(val.toString());
-            } catch (NoSuchMethodException e) {
-                // Best effort: scan for a single-arg method that accepts something named like Stat
-                for (java.lang.reflect.Method m : statsManager.getClass().getMethods()) {
-                    if (m.getParameterCount() == 1) {
-                        Class<?> p = m.getParameterTypes()[0];
-                        if (p == net.minecraft.stats.StatBase.class || p.getName().toLowerCase().contains("stat")) {
-                            try {
-                                Object val = m.invoke(statsManager, stat);
-                                if (val instanceof Number) return ((Number) val).longValue();
-                                if (val != null) return Long.parseLong(val.toString());
-                            } catch (Throwable ignored3) { }
+            if (statsManager != null) {
+                try {
+                    java.lang.reflect.Method readStat = statsManager.getClass().getMethod("readStat", net.minecraft.stats.StatBase.class);
+                    Object val = readStat.invoke(statsManager, stat);
+                    if (val instanceof Number) return ((Number) val).longValue();
+                    if (val != null) return Long.parseLong(val.toString());
+                } catch (NoSuchMethodException e) {
+                    // Best effort: scan for a single-arg method that accepts something named like Stat
+                    for (java.lang.reflect.Method m : statsManager.getClass().getMethods()) {
+                        if (m.getParameterCount() == 1) {
+                            Class<?> p = m.getParameterTypes()[0];
+                            if (p == net.minecraft.stats.StatBase.class || p.getName().toLowerCase().contains("stat")) {
+                                try {
+                                    Object val = m.invoke(statsManager, stat);
+                                    if (val instanceof Number) return ((Number) val).longValue();
+                                    if (val != null) return Long.parseLong(val.toString());
+                                } catch (Throwable ignored3) { }
+                            }
                         }
                     }
-                }
+                } catch (Throwable ignored) { }
             }
         } catch (Throwable ignored) { }
         return null;
@@ -505,24 +519,8 @@ public class GuiIngameMenuVoxelBox extends GuiIngameMenu {
         long minutes = (seconds % 3600L) / 60L;
         long secs = seconds % 60L;
 
-        StringBuilder sb = new StringBuilder();
-        if (days > 0) {
-            sb.append(days).append("d");
-            if (hours > 0) sb.append(' ').append(hours).append("h");
-            if (minutes > 0) sb.append(' ').append(minutes).append("m");
-            if (secs > 0) sb.append(' ').append(secs).append("s");
-        } else if (hours > 0) {
-            sb.append(hours).append("h");
-            if (minutes > 0) sb.append(' ').append(minutes).append("m");
-            if (secs > 0) sb.append(' ').append(secs).append("s");
-        } else if (minutes > 0) {
-            sb.append(minutes).append("m");
-            if (secs > 0) sb.append(' ').append(secs).append("s");
-        } else {
-            sb.append(secs).append("s");
-        }
-
-        return "Playtime: " + sb.toString();
+        // Always show days:HH:MM:SS (zero-padded hours/minutes/seconds)
+        return String.format("%dd %02d:%02d:%02d", days, hours, minutes, secs);
     }
 
     // FTBU reflection helpers removed.
