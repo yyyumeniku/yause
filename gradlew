@@ -136,6 +136,26 @@ Please set the JAVA_HOME variable in your environment to match the
 location of your Java installation."
 fi
 
+# Early guard: detect if the Java runtime is too new for this build env and give a clear hint.
+# (Gradle / Groovy may fail while parsing build scripts if running on a much newer JVM.)
+# If you intentionally want to proceed with a modern JDK, set ALLOW_MODERN_JDK=1 in your environment.
+if [ -n "$JAVACMD" ] ; then
+    ver=$($JAVACMD -version 2>&1 | awk -F '"' '/version/ {print $2}' | sed -e 's/[^0-9.].*//')
+    # parse major (handle formats like '1.8.0_...' and '17.0.1' or '25.0.1')
+    if echo "$ver" | grep -q '^1\.'; then
+        maj=$(echo "$ver" | awk -F. '{print $2}')
+    else
+        maj=$(echo "$ver" | awk -F. '{print $1}')
+    fi
+    if [ -n "$maj" ]; then
+        majnum=$(echo "$maj" | sed 's/[^0-9].*//')
+        if [ "$majnum" -gt 17 ] && [ -z "$ALLOW_MODERN_JDK" ] ; then
+            warn "Detected Java runtime version $ver (major $majnum).\nThis project historically required Java 17 for the dev client. Running with Java $majnum may work, but if you hit build-time issues try the project helper scripts or set JAVA_HOME appropriately.\nTo opt-out of this message set ALLOW_MODERN_JDK=1."
+            # proceed (don't fail) — allow modern JDKs by default
+        fi
+    fi
+fi
+
 # Increase the maximum file descriptors if we can.
 if ! "$cygwin" && ! "$darwin" && ! "$nonstop" ; then
     case $MAX_FD in #(

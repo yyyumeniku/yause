@@ -11,8 +11,9 @@ plugins {
     id 'maven-publish'
     id 'org.jetbrains.gradle.plugin.idea-ext' version '1.1.9'
     id 'com.gtnewhorizons.retrofuturagradle' version '1.4.1'
-    id 'com.matthewprenger.cursegradle' version '1.4.0' apply false
-    id 'com.modrinth.minotaur' version '2.+' apply false
+    id 'com.matthewprenger.cursegradle' version '1.6.0' apply false
+    // Minotaur 3.x contains improvements for newer Gradle APIs; pin to 3.+
+    id 'com.modrinth.minotaur' version '3.+' apply false
     id 'org.jetbrains.changelog' version '2.2.1'
 }
 
@@ -496,9 +497,39 @@ idea.project.settings {
 apply from: 'gradle/scripts/publishing.gradle'
 apply from: 'gradle/scripts/extra.gradle'
 
+// Guard: this older tooling / build setup expects to be run with Java 17.
+// Running the Gradle wrapper on a too-new JDK (e.g. 25+) can cause cryptic
+// "Unsupported class file major version" errors due to incompatible Groovy/
+// Gradle runtime components reading newer class files. Help the developer by
+// failing fast with a clear message and remediation steps.
+def javaSpec = System.getProperty('java.specification.version')
+def parts = javaSpec == null ? [] : javaSpec.tokenize('.')
+def major = -1
+if (parts.size() >= 1) {
+    if (parts[0] == '1' && parts.size() >= 2) {
+        major = parts[1].toInteger()
+    } else {
+        major = parts[0].toInteger()
+    }
+}
+if (major > 17 && !project.hasProperty('allowModernJdk')) {
+    logger.lifecycle("********************************************************************")
+    logger.lifecycle("WARNING: Detected Java ${System.getProperty('java.version')} — this project historically used Java 17 for dev tooling.")
+    logger.lifecycle("Attempting to continue under Java ${major}; if you hit build/runtime errors consider using the helper script to run with Java 17 or add -PallowModernJdk to proceed.")
+    logger.lifecycle("********************************************************************")
+}
+
 // Developer convenience: automatically copy built mod JAR(s) to a local instance's mods folder
 // Usage: you can override the destination with -PinstanceModsPath="/path/to/.minecraft/mods"
-def instanceModsPathStr = project.hasProperty('instanceModsPath') ? property('instanceModsPath') : '/Users/gabriel/Library/Application Support/PrismLauncher/instances/1.12.2 TEST/.minecraft/mods'
+// Allow overriding the instance paths via Gradle properties. If not provided,
+// prefer a per-user PrismLauncher path using the running user's home directory.
+// For CI environments (where the exact home/launcher path might not exist),
+// fall back to a project-local 'build/instance' path so the task doesn't try to
+// create absolute paths to a developer's machine.
+def instanceBaseDefault = System.getProperty('user.home')
+    ? "${System.getProperty('user.home')}/Library/Application Support/PrismLauncher/instances/1.12.2 TEST/.minecraft"
+    : "${buildDir}/instance/.minecraft"
+def instanceModsPathStr = project.hasProperty('instanceModsPath') ? property('instanceModsPath') : "${instanceBaseDefault}/mods"
 def instanceModsDir = file(instanceModsPathStr)
 
 tasks.register('installToInstanceMods', Copy) {
@@ -533,7 +564,7 @@ tasks.named('build') {
 // Convenience task to fetch the latest logs from a developer instance for diagnosis.
 // Usage: ./gradlew fetchInstanceLogs
 // Override default instanceLogsPath with -PinstanceLogsPath="/path/to/.minecraft/logs"
-def instanceLogsPathStr = project.hasProperty('instanceLogsPath') ? property('instanceLogsPath') : '/Users/gabriel/Library/Application Support/PrismLauncher/instances/1.12.2 TEST/.minecraft/logs'
+def instanceLogsPathStr = project.hasProperty('instanceLogsPath') ? property('instanceLogsPath') : "${instanceBaseDefault}/logs"
 def instanceLogsDir = file(instanceLogsPathStr)
 def instanceLogsOut = file("${buildDir}/instance-logs")
 
