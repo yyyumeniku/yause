@@ -1,8 +1,8 @@
-package com.thevoxelbox.yause.event;
+package com.theyausebox.yause.event;
 
-import com.thevoxelbox.yause.VoxelMenu;
-import com.thevoxelbox.yause.config.VoxelMenuConfig;
-import com.thevoxelbox.yause.GuiIngameMenuVoxelBox;
+import com.theyausebox.yause.YauseMenu;
+import com.theyausebox.yause.config.YauseMenuConfig;
+import com.theyausebox.yause.GuiIngameMenuYauseBox;
 import net.minecraft.client.gui.GuiMainMenu;
 import net.minecraft.client.gui.GuiIngameMenu;
 import net.minecraftforge.client.event.GuiOpenEvent;
@@ -18,7 +18,7 @@ public class GuiEventHandler {
         // Always replace the in-game (pause/escape) menu so pause features like playtime
         // are available regardless of whether the custom main menu is enabled.
         if (event.getGui() instanceof GuiIngameMenu) {
-            event.setGui(new GuiIngameMenuVoxelBox());
+            event.setGui(new GuiIngameMenuYauseBox());
             return;
         }
 

@@ -1,4 +1,4 @@
-package com.thevoxelbox.yause;
+package com.theyausebox.yause;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiScreen;

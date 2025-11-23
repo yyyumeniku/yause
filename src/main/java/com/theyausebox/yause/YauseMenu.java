@@ -1,6 +1,6 @@
-package com.thevoxelbox.yause;
+package com.theyausebox.yause;
 
-import com.thevoxelbox.yause.proxy.CommonProxy;
+import com.theyausebox.yause.proxy.CommonProxy;
 import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.fml.common.SidedProxy;
 import net.minecraftforge.fml.common.event.FMLInitializationEvent;
@@ -11,15 +11,15 @@ import org.apache.logging.log4j.Logger;
 import net.minecraftforge.fml.common.Loader;
 
 @Mod(
-    modid = VoxelMenu.MODID,
-    name = VoxelMenu.NAME,
-    version = VoxelMenu.VERSION,
+    modid = YauseMenu.MODID,
+    name = YauseMenu.NAME,
+    version = YauseMenu.VERSION,
     clientSideOnly = true,
     // Make FTBU optional so the mod can still start while we show a clear warning if FTBU is missing.
     dependencies = "after:ftbutilities",
-    guiFactory = "com.thevoxelbox.yause.config.VoxelMenuGuiFactory"
+    guiFactory = "com.theyausebox.yause.config.YauseMenuGuiFactory"
 )
-public class VoxelMenu {
+public class YauseMenu {
     public static final String MODID = "yause";
     public static final String NAME = "Yause";
     public static final String VERSION = "1.0.0";
@@ -31,11 +31,11 @@ public class VoxelMenu {
     // Playtime / FTBU caching removed — the project no longer tracks or displays playtime
     
     @Mod.Instance(MODID)
-    public static VoxelMenu instance;
+    public static YauseMenu instance;
     
     @SidedProxy(
-        clientSide = "com.thevoxelbox.yause.proxy.ClientProxy",
-        serverSide = "com.thevoxelbox.yause.proxy.CommonProxy"
+        clientSide = "com.theyausebox.yause.proxy.ClientProxy",
+        serverSide = "com.theyausebox.yause.proxy.CommonProxy"
     )
     public static CommonProxy proxy;
     

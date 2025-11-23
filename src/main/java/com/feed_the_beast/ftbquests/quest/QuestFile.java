@@ -1,4 +1,4 @@
-package com.thevoxelbox.yause.internal.orig.ftbquests.quest;
+package com.theyausebox.yause.internal.orig.ftbquests.quest;
 
 import java.util.Collections;
 import java.util.List;

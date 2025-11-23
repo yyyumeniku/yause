@@ -10,7 +10,7 @@ dialog.favourite.servername=Server Name
 dialog.favourite.serveraddress=Server Address
 
 menu.ingame.title=Game Menu
-menu.voxeloptions=VoxelOptions
+menu.yauseoptions=YauseOptions
 
 yause.config.showPlaytime=Show Playtime
 yause.config.enableQuests=Enable quests in pause menu

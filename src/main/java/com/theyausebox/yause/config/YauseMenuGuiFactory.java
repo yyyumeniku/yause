@@ -1,13 +1,13 @@
-package com.thevoxelbox.yause.config;
+package com.theyausebox.yause.config;
 
-import com.thevoxelbox.yause.VoxelMenu;
+import com.theyausebox.yause.YauseMenu;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiScreen;
 import net.minecraftforge.fml.client.IModGuiFactory;
 
 import java.util.Set;
 
-public class VoxelMenuGuiFactory implements IModGuiFactory {
+public class YauseMenuGuiFactory implements IModGuiFactory {
 
     @Override
     public void initialize(Minecraft minecraftInstance) {
@@ -21,7 +21,7 @@ public class VoxelMenuGuiFactory implements IModGuiFactory {
 
     @Override
     public GuiScreen createConfigGui(GuiScreen parentScreen) {
-        return new GuiVoxelMenuConfig(parentScreen);
+        return new GuiYauseMenuConfig(parentScreen);
     }
 
     @Override

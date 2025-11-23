@@ -1,4 +1,4 @@
-package com.thevoxelbox.yause.controls;
+package com.theyausebox.yause.controls;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiButton;

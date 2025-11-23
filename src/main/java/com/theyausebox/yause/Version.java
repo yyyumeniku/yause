@@ -1,4 +1,4 @@
-package com.thevoxelbox.yause;
+package com.theyausebox.yause;
 
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
