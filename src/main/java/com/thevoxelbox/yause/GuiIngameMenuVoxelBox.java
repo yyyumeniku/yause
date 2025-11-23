@@ -8,9 +8,8 @@ import net.minecraft.client.gui.GuiMultiplayer;
 import net.minecraft.client.gui.GuiOptions;
 import net.minecraft.client.gui.GuiShareToLan;
 import net.minecraft.client.gui.advancements.GuiScreenAdvancements;
-import net.minecraft.client.gui.achievement.GuiStats;
 import net.minecraft.client.resources.I18n;
-import net.minecraft.stats.StatList;
+// We no longer depend on vanilla StatList for FTBU reads — prefer FTBU keys and tolerant fallbacks.
 import com.thevoxelbox.yause.config.VoxelMenuConfig;
 
 public class GuiIngameMenuVoxelBox extends GuiIngameMenu {
@@ -23,10 +22,7 @@ public class GuiIngameMenuVoxelBox extends GuiIngameMenu {
     private boolean isClosing = false;
     private long closeStartTimeMs = -1;
     private int closeDurationMs = com.thevoxelbox.yause.config.VoxelMenuConfig.closeAnimationMs;
-    // Playtime tracking while pause menu is open so it updates live
-    // -1 indicates no FTBU playtime value has been captured (we *never* use vanilla stats)
-    private long basePlayTicks = -1L;
-    private long sessionPlayTicks = 0;
+    // Playtime feature removed — menu no longer tracks or displays playtime
     // cached info from FTB-Quests and FTB-Utilities
     private String cachedFTBText = null;
     private boolean cachedFTBHasActive = false;
@@ -34,30 +30,7 @@ public class GuiIngameMenuVoxelBox extends GuiIngameMenu {
     private static boolean ftbQuestsMissingInstanceLogged = false;
     private static boolean ftbQuestsMissingSelfLogged = false;
     // (Removed unused start-related probe flags — we do not read per-quest started lists anymore)
-    // FTBU reflection caches — we'll try to get Universe.get() and Universe.getPlayer(player)
-    private static boolean ftbuInitTried = false;
-    // If the optional FTBLib/FTBU classes weren't available during the first probe
-    // the classloader may not have finished wiring things up yet in a dev env.
-    // Allow a retry every few seconds while the mod is installed.
-    private static long ftbuLastInitAttemptMs = 0L;
-    private static final long FTBU_INIT_RETRY_MS = 5000L; // retry every 5s when needed
-    private static Class<?> ftbuUniverseClass = null;
-    private static java.lang.reflect.Method ftbuUniverseGet = null;
-    private static java.lang.reflect.Method ftbuUniverseGetPlayer = null;
-    private static Class<?> ftbuForgePlayerClass = null;
-    private static java.lang.reflect.Method ftbuStatsMethod = null; // method on ForgePlayer to get stats
-    private static java.lang.reflect.Method ftbuReadStatMethod = null; // method on stats object to get a stat value
-    private static boolean ftbuUnavailableLogged = false;
-    private static boolean ftbuPlaytimeMissingLogged = false;
-    // One-time diagnostic dump if FTBU reflection doesn't match our expectations — useful when many mods are present
-    private static boolean ftbuProbeDumpLogged = false;
-    // (Removed unused FTBU vanilla fallback logging flag)
-    // additional FTBU helper: some versions expose a static ForgePlayer getter rather than Universe.get()
-    private static java.lang.reflect.Method ftbuForgePlayerStaticGetter = null;
-    // cached FTBU play ticks (reads once every refresh interval)
-    private Long cachedFTBUPlayTicks = null;
-    private long lastFTBRefreshMs = 0L;
-    private static final long FTB_REFRESH_INTERVAL_MS = 2000L; // refresh every 2s while menu is open
+    // All FTBU/vanilla playtime logic removed
 
     @Override
     public void initGui() {
@@ -102,48 +75,12 @@ public class GuiIngameMenuVoxelBox extends GuiIngameMenu {
         // Update durations from config in case user changed them in the config screen
         this.openDurationMs = com.thevoxelbox.yause.config.VoxelMenuConfig.openAnimationMs;
         this.closeDurationMs = com.thevoxelbox.yause.config.VoxelMenuConfig.closeAnimationMs;
-        // Reset playtime base on open so the menu shows live playtime while open
-        try {
-            // Only populate basePlayTicks when the user has enabled FTBU-based playtime
-            // and FTBU is present. Do not fall back to vanilla playtime; when FTBU is
-            // missing or the feature is disabled we leave it zero so no playtime displays.
-            if (VoxelMenuConfig.showPlaytime && com.thevoxelbox.yause.VoxelMenu.ftbUtilitiesInstalled) {
-                // If we've previously tried to initialize FTBU reflection and it failed,
-                // the 'ftbuInitTried' flag can prevent an immediate re-probe. When the
-                // user opens the menu and playtime is requested *and* FTBU is present,
-                // force a fresh probe so UI shows playtime immediately rather than
-                // relying on the periodic retry window.
-                if (ftbuInitTried && ftbuUniverseClass == null && ftbuForgePlayerClass == null && ftbuForgePlayerStaticGetter == null) {
-                    ftbuInitTried = false;
-                    ftbuLastInitAttemptMs = 0L;
-                    com.thevoxelbox.yause.VoxelMenu.LOGGER.debug("FTBU: forcing reflection re-probe on menu open");
-                }
-                Long v = getFTBUPlayTicks();
-                if (v == null) {
-                    com.thevoxelbox.yause.VoxelMenu.LOGGER.info("Menu open: FTBU installed but playtime read returned null (ftbuInitTried={}, ftbuUnavailableLogged={}, ftbuPlaytimeMissingLogged={})", ftbuInitTried, ftbuUnavailableLogged, ftbuPlaytimeMissingLogged);
-                }
-                // Do NOT fall back to vanilla playtime. If FTBU isn't available mark base as unavailable (-1)
-                this.basePlayTicks = v == null ? -1L : v.longValue();
-            } else {
-                // When FTBU is not installed or disabled, mark as unavailable
-                this.basePlayTicks = -1L;
-            }
-        } catch (Throwable ignored) {
-            this.basePlayTicks = -1L;
-        }
-        this.sessionPlayTicks = 0;
-        // Update FTB-Quests cache and playtime stats once at menu open so we don't reflect each frame
-        if (VoxelMenuConfig.showPlaytime) {
-            Long v = getFTBUPlayTicks();
-            if (v != null) cachedFTBUPlayTicks = v;
-        } else {
-            this.cachedFTBUPlayTicks = null;
-        }
+        // Playtime feature removed — skip FTBU playtime probes and caches
 
         if (VoxelMenuConfig.enableQuests && com.thevoxelbox.yause.VoxelMenu.ftbQuestsInstalled) {
             updateFTBCache();
         }
-        this.lastFTBRefreshMs = net.minecraft.client.Minecraft.getSystemTime();
+        // (playtime removed) updateFTBCache will still be used for FTB Quests hints
     }
 
     // Cache FTB quest info once per menu open so we avoid reflection overhead
@@ -268,15 +205,7 @@ public class GuiIngameMenuVoxelBox extends GuiIngameMenu {
     }
     
 
-    // Update cached FTBU play ticks explicitly (fills cachedFTBUPlayTicks) and returns the value.
-    private Long refreshFTBUPlayTicks() {
-        Long v = getFTBUPlayTicks();
-        if (v != null) {
-            this.cachedFTBUPlayTicks = v;
-            this.lastFTBRefreshMs = net.minecraft.client.Minecraft.getSystemTime();
-        }
-        return v;
-    }
+    // Playtime-related helpers removed — feature deleted per user request.
 
     private void initPanelButtons() {
         // All buttons on left panel
@@ -434,44 +363,13 @@ public class GuiIngameMenuVoxelBox extends GuiIngameMenu {
         this.fontRenderer.drawStringWithShadow(displayTitle, 0f, 0f, titleColor);
         net.minecraft.client.renderer.GlStateManager.popMatrix();
 
-        // Optional playtime stat below the title (FTBU-only)
-        if (VoxelMenuConfig.showPlaytime && this.mc.player != null && com.thevoxelbox.yause.VoxelMenu.ftbUtilitiesInstalled) {
-            int statsX = boxX + 14;
-            int titleHeightPx = (int)(this.fontRenderer.FONT_HEIGHT * 2.0f);
-            int playY = titleY + titleHeightPx + 6;
-
-            // Prefer cached FTBU play ticks, otherwise use the base (taken at menu open) if available
-            Long baseTicksObj = (this.cachedFTBUPlayTicks != null) ? this.cachedFTBUPlayTicks : (this.basePlayTicks >= 0L ? Long.valueOf(this.basePlayTicks) : null);
-
-            if (baseTicksObj == null) {
-                if (!ftbuPlaytimeMissingLogged) {
-                    ftbuPlaytimeMissingLogged = true;
-                    com.thevoxelbox.yause.VoxelMenu.LOGGER.info("Yause: FTBU playtime not available in menu (no FTBU value present). ftbUtilitiesInstalled={}, ftbuInitTried={}, ftbuUnavailableLogged={}", com.thevoxelbox.yause.VoxelMenu.ftbUtilitiesInstalled, ftbuInitTried, ftbuUnavailableLogged);
-                }
-            } else {
-                long baseTicks = baseTicksObj.longValue();
-                if (baseTicks < 0L) {
-                    if (!ftbuPlaytimeMissingLogged) {
-                        ftbuPlaytimeMissingLogged = true;
-                        com.thevoxelbox.yause.VoxelMenu.LOGGER.info("Yause: FTBU playtime not available (base ticks < 0). Skipping display.");
-                    }
-                } else {
-                    long playTicks = baseTicks + this.sessionPlayTicks;
-                    long playSeconds = playTicks / 20L;
-                    String playtimeStr = formatPlaytime(playSeconds);
-                    int infoColor = (int) (0xCC * openProgress) << 24 | 0x999999;
-                    this.fontRenderer.drawStringWithShadow(playtimeStr, statsX, playY, infoColor);
-                }
-            }
-        }
+        // Playtime display removed — no playtime text is drawn
 
         // Optional FTB-Quests integration (soft, reflection-based) — we cache results on open to reduce overhead
         if (VoxelMenuConfig.enableQuests && com.thevoxelbox.yause.VoxelMenu.ftbQuestsInstalled) {
             // compute common y coordinate for the FTB message/hint area
             int ftbY = boxY + 28 + (int)(this.fontRenderer.FONT_HEIGHT * 2.0f) + 6;
-            if (VoxelMenuConfig.showPlaytime) {
-                ftbY += this.fontRenderer.FONT_HEIGHT + 4;
-            }
+            // ftbY remains directly below the title area
             if (this.cachedFTBHasActive && this.cachedFTBText != null) {
                 int infoColor = (int) (0xCC * openProgress) << 24 | 0x88CCFF; // blueish hint for FTB
                 this.fontRenderer.drawStringWithShadow(this.cachedFTBText, boxX + 14, ftbY, infoColor);
@@ -521,276 +419,9 @@ public class GuiIngameMenuVoxelBox extends GuiIngameMenu {
         net.minecraft.client.renderer.GlStateManager.popMatrix();
     }
 
-    // Human-friendly playtime formatting: e.g., "2d 3h 12m 5s" or "5m 20s" (always include seconds when relevant)
-    private String formatPlaytime(long seconds) {
-        long days = seconds / 86400L;
-        long hours = (seconds % 86400L) / 3600L;
-        long minutes = (seconds % 3600L) / 60L;
-        long secs = seconds % 60L;
+    // Playtime formatting removed.
 
-        StringBuilder sb = new StringBuilder();
-        if (days > 0) {
-            sb.append(days).append("d");
-            if (hours > 0) sb.append(' ').append(hours).append("h");
-            if (minutes > 0) sb.append(' ').append(minutes).append("m");
-            if (secs > 0) sb.append(' ').append(secs).append("s");
-        } else if (hours > 0) {
-            sb.append(hours).append("h");
-            if (minutes > 0) sb.append(' ').append(minutes).append("m");
-            if (secs > 0) sb.append(' ').append(secs).append("s");
-        } else if (minutes > 0) {
-            sb.append(minutes).append("m");
-            if (secs > 0) sb.append(' ').append(secs).append("s");
-        } else {
-            // less than a minute — always show seconds
-            sb.append(secs).append("s");
-        }
-
-        return "Playtime: " + sb.toString();
-    }
-
-    // Try to read FTBU centralized playtime (leaderboard/time_played) via reflection.
-    // Returns ticks or null if unavailable.
-    private Long getFTBUPlayTicks() {
-        // Initialize FTBU reflection method handles on demand.
-        // If an earlier probe failed but the mod is present, retry periodically.
-        long now = net.minecraft.client.Minecraft.getSystemTime();
-        boolean shouldProbe = false;
-        if (!ftbuInitTried) {
-            shouldProbe = true;
-            ftbuInitTried = true;
-            ftbuLastInitAttemptMs = now;
-        } else if (com.thevoxelbox.yause.VoxelMenu.ftbUtilitiesInstalled && ftbuUniverseClass == null && ftbuForgePlayerClass == null && now - ftbuLastInitAttemptMs >= FTBU_INIT_RETRY_MS) {
-            // previously failed but FTBU is installed — try again every FTBU_INIT_RETRY_MS
-            shouldProbe = true;
-            ftbuLastInitAttemptMs = now;
-        }
-
-        if (shouldProbe) {
-            try {
-                    ftbuUniverseClass = Class.forName("com.feed_the_beast.ftblib.lib.data.Universe");
-                ftbuUniverseGet = ftbuUniverseClass.getMethod("get");
-                // getPlayer overload accepts EntityPlayer, UUID or CharSequence
-                for (java.lang.reflect.Method m : ftbuUniverseClass.getMethods()) {
-                    if (m.getName().equals("getPlayer") && m.getParameterCount() == 1) {
-                        Class<?> p = m.getParameterTypes()[0];
-                        if (p.isAssignableFrom(this.mc.player.getClass()) || p == java.util.UUID.class || p == java.lang.CharSequence.class) {
-                            ftbuUniverseGetPlayer = m;
-                            break;
-                        }
-                    }
-                }
-
-                ftbuForgePlayerClass = Class.forName("com.feed_the_beast.ftblib.lib.data.ForgePlayer");
-                ftbuStatsMethod = ftbuForgePlayerClass.getMethod("stats");
-                Class<?> statsCls = ftbuStatsMethod.getReturnType();
-                ftbuReadStatMethod = statsCls.getMethod("readStat", net.minecraft.stats.StatBase.class);
-                
-                // If Universe path wasn't fully present, try a fallback: some FTBLib versions expose
-                // a static ForgePlayer getter directly on the ForgePlayer class (see initGui earlier).
-                if ((ftbuUniverseClass == null || ftbuUniverseGet == null || ftbuUniverseGetPlayer == null) && ftbuForgePlayerClass == null) {
-                    try {
-                        Class<?> fp = Class.forName("com.feed_the_beast.ftblib.lib.data.ForgePlayer");
-                        for (java.lang.reflect.Method m : fp.getMethods()) {
-                            if (java.lang.reflect.Modifier.isStatic(m.getModifiers()) && m.getParameterCount() == 1) {
-                                Class<?> p = m.getParameterTypes()[0];
-                                if (p.isAssignableFrom(this.mc.player.getClass()) || p == java.util.UUID.class || p == java.lang.CharSequence.class) {
-                                    ftbuForgePlayerStaticGetter = m;
-                                    ftbuForgePlayerClass = fp;
-                                    break;
-                                }
-                            }
-                        }
-
-                        if (ftbuForgePlayerClass != null && ftbuStatsMethod == null) {
-                            ftbuStatsMethod = ftbuForgePlayerClass.getMethod("stats");
-                            Class<?> statsCls2 = ftbuStatsMethod.getReturnType();
-                            ftbuReadStatMethod = statsCls2.getMethod("readStat", net.minecraft.stats.StatBase.class);
-                        }
-                    } catch (Throwable ignored) {}
-                }
-            } catch (Throwable t) {
-                // ignore - optional integration
-            }
-            // If the probe succeeded (we now have at least one method path) clear the
-            // 'unavailable' marker so subsequent reads will attempt to fetch stats.
-            if (ftbuUniverseClass != null || ftbuForgePlayerClass != null || ftbuForgePlayerStaticGetter != null) {
-                if (ftbuUnavailableLogged) {
-                    ftbuUnavailableLogged = false;
-                    com.thevoxelbox.yause.VoxelMenu.LOGGER.info("FTBU reflection probe succeeded on retry — re-enabling FTBU playtime reads");
-                }
-            }
-        }
-            if (ftbuUniverseClass == null && ftbuForgePlayerClass == null) {
-                // FTBU method pieces are missing — nothing we can do
-                if (!ftbuUnavailableLogged) {
-                    ftbuUnavailableLogged = true;
-                    com.thevoxelbox.yause.VoxelMenu.LOGGER.info("FTBU reflection not available — playtime via FTBU will be disabled (universeClass={}, universeGet={}, universeGetPlayer={}, forgePlayerClass={}, forgePlayerStaticGetter={})",
-                            ftbuUniverseClass == null ? "<null>" : ftbuUniverseClass.getName(),
-                            ftbuUniverseGet == null ? "<null>" : ftbuUniverseGet.getName(),
-                            ftbuUniverseGetPlayer == null ? "<null>" : ftbuUniverseGetPlayer.getName(),
-                            ftbuForgePlayerClass == null ? "<null>" : ftbuForgePlayerClass.getName(),
-                            ftbuForgePlayerStaticGetter == null ? "<null>" : ftbuForgePlayerStaticGetter.getName());
-                }
-                return null;
-            }
-
-        try {
-            Object forgePlayer = null;
-
-            // Prefer Universe.get().getPlayer(...) if available
-            if (ftbuUniverseGet != null && ftbuUniverseGetPlayer != null) {
-                Object universe = ftbuUniverseGet.invoke(null);
-                if (universe == null) return null;
-                Class<?> param = ftbuUniverseGetPlayer.getParameterTypes()[0];
-                if (param.isAssignableFrom(this.mc.player.getClass())) {
-                    forgePlayer = ftbuUniverseGetPlayer.invoke(universe, this.mc.player);
-                } else if (param == java.util.UUID.class) {
-                    forgePlayer = ftbuUniverseGetPlayer.invoke(universe, this.mc.player.getUniqueID());
-                } else if (param == java.lang.CharSequence.class) {
-                    forgePlayer = ftbuUniverseGetPlayer.invoke(universe, this.mc.player.getName());
-                }
-            }
-
-            // Fallback: some versions expose a static ForgePlayer getter on ForgePlayer class
-            if (forgePlayer == null && ftbuForgePlayerStaticGetter != null) {
-                Class<?> param = ftbuForgePlayerStaticGetter.getParameterTypes()[0];
-                if (param.isAssignableFrom(this.mc.player.getClass())) {
-                    forgePlayer = ftbuForgePlayerStaticGetter.invoke(null, this.mc.player);
-                } else if (param == java.util.UUID.class) {
-                    forgePlayer = ftbuForgePlayerStaticGetter.invoke(null, this.mc.player.getUniqueID());
-                } else if (param == java.lang.CharSequence.class) {
-                    forgePlayer = ftbuForgePlayerStaticGetter.invoke(null, this.mc.player.getName());
-                }
-            }
-
-            if (forgePlayer == null) {
-                // Log detailed probe state when forgePlayer can't be resolved
-                com.thevoxelbox.yause.VoxelMenu.LOGGER.info("FTBU: forgePlayer lookup returned null (universe={}, getPlayerMethod={}, staticGetter={})",
-                        ftbuUniverseClass == null ? "<null>" : ftbuUniverseClass.getName(),
-                        ftbuUniverseGetPlayer == null ? "<null>" : ftbuUniverseGetPlayer == null ? "<null>" : ftbuUniverseGetPlayer.getName(),
-                        ftbuForgePlayerStaticGetter == null ? "<null>" : ftbuForgePlayerStaticGetter.getName());
-                return null;
-            }
-
-            Object stats = ftbuStatsMethod.invoke(forgePlayer);
-
-            // Defensive: avoid directly invoking a potentially-null method handle
-            Object val = null;
-            java.lang.reflect.Method localRead = ftbuReadStatMethod;
-            if (localRead != null) {
-                try {
-                    val = localRead.invoke(stats, StatList.PLAY_ONE_MINUTE);
-                } catch (Throwable t2) {
-                    com.thevoxelbox.yause.VoxelMenu.LOGGER.debug("FTBU: readStat invocation failed — will search for alternative methods: {}", t2.getMessage());
-                }
-            } else {
-                com.thevoxelbox.yause.VoxelMenu.LOGGER.debug("FTBU: no direct readStat method found on stats object (probe did not detect ftbuReadStatMethod) — attempting tolerant fallbacks");
-            }
-
-            // If the direct read failed or wasn't available, perform tolerant fallbacks on the stats object
-            if (val == null && stats != null) {
-                Class<?> statsClsAlt = stats.getClass();
-                for (java.lang.reflect.Method m : statsClsAlt.getMethods()) {
-                    String name = m.getName().toLowerCase();
-                    if ((name.contains("read") || name.contains("get") || name.contains("value") || name.contains("stat")) && m.getParameterCount() == 1) {
-                        Class<?> p = m.getParameterTypes()[0];
-                        Object arg = null;
-                        try {
-                            if (p.isAssignableFrom(net.minecraft.stats.StatBase.class)) {
-                                arg = StatList.PLAY_ONE_MINUTE;
-                            } else if (p == String.class || p == java.lang.CharSequence.class) {
-                                arg = StatList.PLAY_ONE_MINUTE.toString();
-                            } else if (p == Integer.TYPE || p == Integer.class || p == Long.TYPE || p == Long.class) {
-                                // Some stat implementations accept a numeric id — we never use vanilla stats,
-                                // so we skip numeric-friendly candidate methods rather than seeding them
-                                // with the vanilla player's stat value.
-                                arg = null;
-                            }
-
-                            if (arg != null) {
-                                Object rv = m.invoke(stats, arg);
-                                if (rv != null) {
-                                    val = rv;
-                                    com.thevoxelbox.yause.VoxelMenu.LOGGER.debug("FTBU: alternate stat-read method '{}' succeeded — value class={}", m.getName(), rv.getClass().getName());
-                                    break;
-                                }
-                            }
-                        } catch (Throwable ignore) { /* try next candidate */ }
-                    }
-                }
-            }
-
-            if (val == null) {
-                // If stats object is null or val is null, log more details so we can diagnose missing method names
-                if (stats == null) {
-                    com.thevoxelbox.yause.VoxelMenu.LOGGER.info("FTBU: stats object is null (forgePlayerClass={}, statsMethod={})",
-                            ftbuForgePlayerClass == null ? "<null>" : ftbuForgePlayerClass.getName(),
-                            ftbuStatsMethod == null ? "<null>" : ftbuStatsMethod.getName());
-                } else {
-                    com.thevoxelbox.yause.VoxelMenu.LOGGER.info("FTBU: stats object present but stat read returned null (statsClass={})", stats.getClass().getName());
-                }
-                // If we can't read a playtime value, dump the probe info once — this helps diagnose "works in vanilla but not with mods" cases
-                if (!ftbuProbeDumpLogged) {
-                    ftbuProbeDumpLogged = true;
-                    try {
-                        StringBuilder sb = new StringBuilder();
-                        sb.append("FTBU Probe Dump: \n");
-                        sb.append("Universe class: ").append(ftbuUniverseClass == null ? "<null>" : ftbuUniverseClass.getName()).append('\n');
-                        sb.append("Universe.get method: ").append(ftbuUniverseGet == null ? "<null>" : ftbuUniverseGet.getName()).append('\n');
-                        sb.append("Universe.getPlayer method: ").append(ftbuUniverseGetPlayer == null ? "<null>" : ftbuUniverseGetPlayer.getName()).append('\n');
-                        sb.append("ForgePlayer class: ").append(ftbuForgePlayerClass == null ? "<null>" : ftbuForgePlayerClass.getName()).append('\n');
-                        sb.append("ForgePlayer.stats method: ").append(ftbuStatsMethod == null ? "<null>" : ftbuStatsMethod.getName()).append('\n');
-                        sb.append("Stats-reader method: ").append(ftbuReadStatMethod == null ? "<null>" : ftbuReadStatMethod.getName()).append('\n');
-                        // If we have a stats object, list its methods (shortened)
-                        if (stats != null) {
-                            sb.append("stats object class: ").append(stats.getClass().getName()).append('\n');
-                            sb.append("stats methods:\n");
-                            for (java.lang.reflect.Method m : stats.getClass().getMethods()) {
-                                sb.append(" - ").append(m.getName()).append('(');
-                                Class<?>[] pts = m.getParameterTypes();
-                                for (int i=0;i<pts.length;i++) {
-                                    if (i>0) sb.append(',');
-                                    sb.append(pts[i].getSimpleName());
-                                }
-                                sb.append(')').append('\n');
-                            }
-
-                            sb.append("stats candidate reader methods:\n");
-                            for (java.lang.reflect.Method m : stats.getClass().getMethods()) {
-                                String n = m.getName().toLowerCase();
-                                if ((n.contains("read") || n.contains("get") || n.contains("value") || n.contains("stat")) && m.getParameterCount() == 1) {
-                                    sb.append(" - ").append(m.getName()).append('(').append(m.getParameterTypes()[0].getSimpleName()).append(")\n");
-                                }
-                            }
-                        }
-                        com.thevoxelbox.yause.VoxelMenu.LOGGER.warn(sb.toString());
-                    } catch (Throwable ignored) {}
-                }
-                // No stat available for this player yet — mark missing so we don't spam logs.
-                ftbuPlaytimeMissingLogged = true;
-                com.thevoxelbox.yause.VoxelMenu.LOGGER.info("Yause: FTBU playtime not available in menu (cachedFTBUPlayTicks == null and basePlayTicks<0). ftbUtilitiesInstalled={}, ftbuInitTried={}, ftbuUnavailableLogged={}", com.thevoxelbox.yause.VoxelMenu.ftbUtilitiesInstalled, ftbuInitTried, ftbuUnavailableLogged);
-                com.thevoxelbox.yause.VoxelMenu.LOGGER.debug("FTBU: playtime stat read returned null (stats object: {}). Not falling back to vanilla stats.", stats == null ? "null" : stats.getClass().getName());
-                return null;
-            }
-                // We got a value — ensure missing flag is cleared so the menu will display playtime.
-                if (ftbuPlaytimeMissingLogged) {
-                    ftbuPlaytimeMissingLogged = false;
-                    com.thevoxelbox.yause.VoxelMenu.LOGGER.debug("FTBU: playtime stat now available — clearing missing flag");
-                }
-                com.thevoxelbox.yause.VoxelMenu.LOGGER.debug("FTBU: playtime stat value read: {} (class={})", val, val == null ? "null" : val.getClass().getName());
-            if (val instanceof Number) return ((Number) val).longValue();
-            return Long.parseLong(val.toString());
-        } catch (Throwable t) {
-            if (!ftbuUnavailableLogged) {
-                ftbuUnavailableLogged = true;
-                com.thevoxelbox.yause.VoxelMenu.LOGGER.debug("FTBU playtime reflection failed — disabling FTBU playtime ({}).", t.getMessage());
-            }
-            // We do not fall back to vanilla playtime when FTBU reflection fails.
-            // Return null so callers know FTBU isn't available and the UI can omit a value.
-            return null;
-        }
-    }
+    // FTBU reflection helpers removed.
     @Override
     protected void mouseClicked(int mouseX, int mouseY, int mouseButton) throws java.io.IOException {
         // Adjust mouse x for the open animation translate so clicks map to drawn positions
@@ -843,8 +474,7 @@ public class GuiIngameMenuVoxelBox extends GuiIngameMenu {
     public void onGuiClosed() {
         // Release cached values to free small amounts of memory (strings, boxed Longs)
         this.cachedFTBText = null;
-        this.cachedFTBUPlayTicks = null;
-        this.lastFTBRefreshMs = 0L;
+        // playtime removed — nothing to clear here
         super.onGuiClosed();
     }
 
@@ -856,23 +486,13 @@ public class GuiIngameMenuVoxelBox extends GuiIngameMenu {
         // Only update sessionPlayTicks when the game is actually running (not paused). The
         // pause menu should not artificially increment the player's playtime while the
         // integrated server/world is paused (single-player pause), so check isGamePaused.
-        if (this.mc.player != null && this.openStartTimeMs >= 0 && !this.isClosing) {
-            if (!this.mc.isGamePaused()) {
-                ++this.sessionPlayTicks;
-            }
-        }
+        // Playtime tracking removed — do not increment session play ticks
 
         // Periodic refresh of FTBU play ticks and FTB-Quests cache while the menu is open (reduce reflection frequency)
         if (this.openStartTimeMs >= 0 && !this.isClosing) {
             long now = net.minecraft.client.Minecraft.getSystemTime();
-            if (now - this.lastFTBRefreshMs >= FTB_REFRESH_INTERVAL_MS) {
-                this.lastFTBRefreshMs = now;
-                if (VoxelMenuConfig.showPlaytime && com.thevoxelbox.yause.VoxelMenu.ftbUtilitiesInstalled) {
-                    refreshFTBUPlayTicks();
-                }
-                if (VoxelMenuConfig.enableQuests && com.thevoxelbox.yause.VoxelMenu.ftbQuestsInstalled) {
-                    updateFTBCache();
-                }
+            if (VoxelMenuConfig.enableQuests && com.thevoxelbox.yause.VoxelMenu.ftbQuestsInstalled) {
+                updateFTBCache();
             }
         }
     }

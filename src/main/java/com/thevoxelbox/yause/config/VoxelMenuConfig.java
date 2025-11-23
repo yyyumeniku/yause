@@ -24,8 +24,6 @@ public class VoxelMenuConfig {
     // When true, disable screen transition animations
     public static boolean disableTransitions;
     // transitionType removed — screen transitions were removed with main menu
-    // Toggle to display playtime in the pause menu
-    public static boolean showPlaytime;
     // New flags: enableQuests controls whether FTB-Quests hints are shown in the pause
     // menu. Playtime is governed by showPlaytime and requires FTBU at runtime.
     public static boolean enableQuests;
@@ -61,12 +59,7 @@ public class VoxelMenuConfig {
             
             // Screen transitions were removed when the main menu was deleted.
 
-            showPlaytime = config.getBoolean(
-                "showPlaytime",
-                CATEGORY_MENU,
-                true,
-                "Show player playtime in the pause menu"
-            );
+            // playtime support removed — the menu no longer displays playtime
             
             menuOffsetX = config.getInt(
                 "menuOffsetX",

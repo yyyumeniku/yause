@@ -33,6 +33,7 @@ public class ClientProxy extends CommonProxy {
     @Override
     public void postInit(FMLPostInitializationEvent event) {
         super.postInit(event);
+        // FTBU playtime listeners removed — playtime feature deleted per configuration
         
         VoxelMenu.LOGGER.info("Yause client post-initialization complete");
     }

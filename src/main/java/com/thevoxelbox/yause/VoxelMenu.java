@@ -28,6 +28,7 @@ public class VoxelMenu {
     // Cached mod presence for optional integrations
     public static boolean ftbQuestsInstalled = false;
     public static boolean ftbUtilitiesInstalled = false;
+    // Playtime / FTBU caching removed — the project no longer tracks or displays playtime
     
     @Mod.Instance(MODID)
     public static VoxelMenu instance;
