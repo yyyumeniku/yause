@@ -47,7 +47,10 @@ if (majorVersion > 17) {
     println 'This workspace expects the build to run with Java 17 for best Gradle/Groovy compatibility.'
     println 'Please set the JAVA_HOME environment variable to your Java 17 installation and re-run Gradle.'
     println 'Example (macOS):\n    export JAVA_HOME=$(/usr/libexec/java_home -v 17)\n    ./gradlew runClient'
-    throw new GradleException('Please run Gradle using Java 17 to avoid "Unsupported class file major version" build errors.')
+    // Instead of failing hard, warn the user and continue. Some environments (like newer Java)
+    // may still work for builds but can produce Groovy/Gradle compatibility warnings. If you
+    // run into plugin or runtime issues, please run Gradle using a Java 17 runtime.
+    println 'Continuing build under current Java runtime — this may produce warnings or plugin compatibility issues.'
 }
 
 // Early Assertions

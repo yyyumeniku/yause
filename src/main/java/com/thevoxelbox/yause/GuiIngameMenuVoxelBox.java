@@ -22,7 +22,13 @@ public class GuiIngameMenuVoxelBox extends GuiIngameMenu {
     private boolean isClosing = false;
     private long closeStartTimeMs = -1;
     private int closeDurationMs = com.thevoxelbox.yause.config.VoxelMenuConfig.closeAnimationMs;
-    // Playtime feature removed — menu no longer tracks or displays playtime
+    // Lightweight client-side vanilla playtime (ticks) tracking and display
+    // - basePlayTicks: cached value read from vanilla StatList.PLAY_ONE_MINUTE on menu open
+    // - sessionPlayTicks: increments while the pause menu is open and the game is running
+    private long basePlayTicks = -1L; // -1 = unavailable
+    private long sessionPlayTicks = 0L; // ticks accumulated since menu opened
+    private long sessionPlaySeconds = 0L; // seconds accumulator for per-second refresh
+    private long lastPlayUpdateMs = 0L; // last time we updated the seconds counter (ms)
     // cached info from FTB-Quests and FTB-Utilities
     private String cachedFTBText = null;
     private boolean cachedFTBHasActive = false;
@@ -75,7 +81,15 @@ public class GuiIngameMenuVoxelBox extends GuiIngameMenu {
         // Update durations from config in case user changed them in the config screen
         this.openDurationMs = com.thevoxelbox.yause.config.VoxelMenuConfig.openAnimationMs;
         this.closeDurationMs = com.thevoxelbox.yause.config.VoxelMenuConfig.closeAnimationMs;
-        // Playtime feature removed — skip FTBU playtime probes and caches
+        // Initialize lightweight vanilla playtime tracking when enabled by config
+        this.basePlayTicks = -1L;
+        this.sessionPlayTicks = 0L;
+        this.sessionPlaySeconds = 0L;
+        this.lastPlayUpdateMs = net.minecraft.client.Minecraft.getSystemTime();
+        if (VoxelMenuConfig.showPlaytime && this.mc != null && this.mc.player != null) {
+            Long v = getVanillaPlayTicks();
+            this.basePlayTicks = v == null ? -1L : v.longValue();
+        }
 
         if (VoxelMenuConfig.enableQuests && com.thevoxelbox.yause.VoxelMenu.ftbQuestsInstalled) {
             updateFTBCache();
@@ -205,12 +219,63 @@ public class GuiIngameMenuVoxelBox extends GuiIngameMenu {
     }
     
 
-    // Playtime-related helpers removed — feature deleted per user request.
+    // =========================
+    // Vanilla playtime helpers
+    // =========================
+
+    // Read vanilla playtime (StatList.PLAY_ONE_MINUTE) from the client's stats manager.
+    // Returns ticks or null if unavailable.
+    private Long getVanillaPlayTicks() {
+        try {
+            if (this.mc == null || this.mc.player == null) return null;
+            net.minecraft.stats.StatBase stat = net.minecraft.stats.StatList.PLAY_ONE_MINUTE;
+            if (stat == null) return null;
+
+            Object statsManager = null;
+            try {
+                // Normal access (MCP mapping): getStatFileWriter()
+                statsManager = this.mc.player.getStatFileWriter();
+            } catch (Throwable ignored) {
+                // If the mapping differs, try reflection on a likely field name
+                try {
+                    java.lang.reflect.Field f = this.mc.player.getClass().getDeclaredField("statFileWriter");
+                    f.setAccessible(true);
+                    statsManager = f.get(this.mc.player);
+                } catch (Throwable ignored2) { }
+            }
+
+            if (statsManager == null) return null;
+
+            try {
+                java.lang.reflect.Method readStat = statsManager.getClass().getMethod("readStat", net.minecraft.stats.StatBase.class);
+                Object val = readStat.invoke(statsManager, stat);
+                if (val instanceof Number) return ((Number) val).longValue();
+                if (val != null) return Long.parseLong(val.toString());
+            } catch (NoSuchMethodException e) {
+                // Best effort: scan for a single-arg method that accepts something named like Stat
+                for (java.lang.reflect.Method m : statsManager.getClass().getMethods()) {
+                    if (m.getParameterCount() == 1) {
+                        Class<?> p = m.getParameterTypes()[0];
+                        if (p == net.minecraft.stats.StatBase.class || p.getName().toLowerCase().contains("stat")) {
+                            try {
+                                Object val = m.invoke(statsManager, stat);
+                                if (val instanceof Number) return ((Number) val).longValue();
+                                if (val != null) return Long.parseLong(val.toString());
+                            } catch (Throwable ignored3) { }
+                        }
+                    }
+                }
+            }
+        } catch (Throwable ignored) { }
+        return null;
+    }
 
     private void initPanelButtons() {
         // All buttons on left panel
         this.buttonPanelLeft.addButton(I18n.format("menu.returnToGame"));
         this.buttonPanelLeft.addButton(I18n.format("gui.advancements"));
+        // Restore the vanilla Stats button so users can open the full stats screen
+        this.buttonPanelLeft.addButton(I18n.format("gui.stats"));
         // Removed vanilla stats button - playtime display is FTBU-only
         // Removed feedback & report buttons per user's request
         this.buttonPanelLeft.addButton(I18n.format("menu.options"));
@@ -255,6 +320,13 @@ public class GuiIngameMenuVoxelBox extends GuiIngameMenu {
             }
         } else if (buttonText.equals(I18n.format("gui.advancements"))) {
             this.mc.displayGuiScreen(new GuiScreenAdvancements(this.mc.player.connection.getAdvancementManager()));
+        } else if (buttonText.equals(I18n.format("gui.stats"))) {
+            try {
+                // Open the vanilla stats screen (MCP: GuiStats / obfuscated may differ); use known class name for 1.12
+                this.mc.displayGuiScreen(new net.minecraft.client.gui.achievement.GuiStats(this, this.mc.player.getStatFileWriter()));
+            } catch (Throwable t) {
+                com.thevoxelbox.yause.VoxelMenu.LOGGER.warn("Failed to open vanilla Stats GUI: {}", t.getMessage());
+            }
         } else if (buttonText.equals(I18n.format("menu.shareToLan"))) {
             this.mc.displayGuiScreen(new GuiShareToLan(this));
         } else if (buttonText.equals(I18n.format("menu.returnToMenu")) || buttonText.equals(I18n.format("menu.disconnect"))) {
@@ -363,7 +435,29 @@ public class GuiIngameMenuVoxelBox extends GuiIngameMenu {
         this.fontRenderer.drawStringWithShadow(displayTitle, 0f, 0f, titleColor);
         net.minecraft.client.renderer.GlStateManager.popMatrix();
 
-        // Playtime display removed — no playtime text is drawn
+        // Vanilla playtime display (client-side only)
+        if (VoxelMenuConfig.showPlaytime && this.mc.player != null) {
+            long baseTicks = this.basePlayTicks;
+            long totalTicks = (baseTicks >= 0L ? baseTicks : 0L) + this.sessionPlayTicks;
+            if (baseTicks >= 0L || this.sessionPlaySeconds > 0L) {
+                // playSeconds reflects the player's total time in the world (vanilla stat = "time played")
+                long playSeconds = (baseTicks >= 0L ? baseTicks / 20L : 0L) + this.sessionPlaySeconds;
+                String playtimeStr = formatPlaytime(playSeconds);
+                int infoColor = ((int)(0xCC * openProgress) << 24) | 0x999999;
+                int statsX = boxX + 14;
+                int titleHeightPx = (int)(this.fontRenderer.FONT_HEIGHT * 2.0f);
+                int playY = titleY + titleHeightPx + 6;
+                this.fontRenderer.drawStringWithShadow(playtimeStr, statsX, playY, infoColor);
+                // show the vanilla/time-played (timelapse) + seconds-since-menu-opened for clarity
+                String elapsed = "Since menu opened: " + this.sessionPlaySeconds + "s";
+                // Timelapse — explicit label to indicate the stat-based world playtime
+                String timelapse = "Time played (world): " + playtimeStr.replace("Playtime: ", "");
+                int elapsedY = playY + this.fontRenderer.FONT_HEIGHT + 2;
+                // Draw timelapse above the simple elapsed seconds to emphasize the stat
+                this.fontRenderer.drawStringWithShadow(timelapse, statsX, elapsedY, infoColor);
+                this.fontRenderer.drawStringWithShadow(elapsed, statsX, elapsedY + this.fontRenderer.FONT_HEIGHT + 2, infoColor);
+            }
+        }
 
         // Optional FTB-Quests integration (soft, reflection-based) — we cache results on open to reduce overhead
         if (VoxelMenuConfig.enableQuests && com.thevoxelbox.yause.VoxelMenu.ftbQuestsInstalled) {
@@ -419,7 +513,32 @@ public class GuiIngameMenuVoxelBox extends GuiIngameMenu {
         net.minecraft.client.renderer.GlStateManager.popMatrix();
     }
 
-    // Playtime formatting removed.
+    // Format seconds into a human friendly string, e.g. "Playtime: 2d 3h 12m 5s".
+    private String formatPlaytime(long seconds) {
+        long days = seconds / 86400L;
+        long hours = (seconds % 86400L) / 3600L;
+        long minutes = (seconds % 3600L) / 60L;
+        long secs = seconds % 60L;
+
+        StringBuilder sb = new StringBuilder();
+        if (days > 0) {
+            sb.append(days).append("d");
+            if (hours > 0) sb.append(' ').append(hours).append("h");
+            if (minutes > 0) sb.append(' ').append(minutes).append("m");
+            if (secs > 0) sb.append(' ').append(secs).append("s");
+        } else if (hours > 0) {
+            sb.append(hours).append("h");
+            if (minutes > 0) sb.append(' ').append(minutes).append("m");
+            if (secs > 0) sb.append(' ').append(secs).append("s");
+        } else if (minutes > 0) {
+            sb.append(minutes).append("m");
+            if (secs > 0) sb.append(' ').append(secs).append("s");
+        } else {
+            sb.append(secs).append("s");
+        }
+
+        return "Playtime: " + sb.toString();
+    }
 
     // FTBU reflection helpers removed.
     @Override
@@ -474,7 +593,11 @@ public class GuiIngameMenuVoxelBox extends GuiIngameMenu {
     public void onGuiClosed() {
         // Release cached values to free small amounts of memory (strings, boxed Longs)
         this.cachedFTBText = null;
-        // playtime removed — nothing to clear here
+        // Clear playtime caches for the next open
+        this.basePlayTicks = -1L;
+        this.sessionPlayTicks = 0L;
+        this.sessionPlaySeconds = 0L;
+        this.lastPlayUpdateMs = 0L;
         super.onGuiClosed();
     }
 
@@ -482,11 +605,22 @@ public class GuiIngameMenuVoxelBox extends GuiIngameMenu {
     public void updateScreen() {
         super.updateScreen();
         ++this.updateCounter;
-        // increment session tick counter while pause menu is open so playtime updates in-real-time
-        // Only update sessionPlayTicks when the game is actually running (not paused). The
-        // pause menu should not artificially increment the player's playtime while the
-        // integrated server/world is paused (single-player pause), so check isGamePaused.
-        // Playtime tracking removed — do not increment session play ticks
+        // Increment session tick counter while pause menu is open so playtime updates in real-time.
+        // Only increment when the game is not paused (so we don't add ticks during single-player pause).
+        if (this.openStartTimeMs >= 0 && !this.isClosing && this.mc.player != null) {
+            // Update the per-second time-lapse regardless of pause so the UI feels live.
+            long now = net.minecraft.client.Minecraft.getSystemTime();
+            if (now - this.lastPlayUpdateMs >= 1000L) {
+                long deltaMs = now - this.lastPlayUpdateMs;
+                long deltaSeconds = Math.max(1L, deltaMs / 1000L);
+                this.sessionPlaySeconds += deltaSeconds;
+                this.lastPlayUpdateMs = now;
+            }
+            // Only increment tick-based sessionPlayTicks when the client is not paused
+            if (!this.mc.isGamePaused()) {
+                ++this.sessionPlayTicks; // ticks accumulate each tick
+            }
+        }
 
         // Periodic refresh of FTBU play ticks and FTB-Quests cache while the menu is open (reduce reflection frequency)
         if (this.openStartTimeMs >= 0 && !this.isClosing) {
