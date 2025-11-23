@@ -430,41 +430,40 @@ public class GuiIngameMenuVoxelBox extends GuiIngameMenu {
         this.fontRenderer.drawStringWithShadow(displayTitle, 0f, 0f, titleColor);
         net.minecraft.client.renderer.GlStateManager.popMatrix();
 
-        // Vanilla playtime display (client-side only)
+        // Base X/Y for the informational area directly below the title
+        int infoX = boxX + 14;
+        int titleHeightPx = (int)(this.fontRenderer.FONT_HEIGHT * 2.0f);
+        int infoStartY = titleY + titleHeightPx + 6;
+
+        // First draw the optional FTB-Quests chapter/hint at infoStartY. If we drew
+        // a chapter/hint we'll shift the 'Time played' stat below it to avoid overlap.
+        boolean drewFTB = false;
+        if (VoxelMenuConfig.enableQuests && com.thevoxelbox.yause.VoxelMenu.ftbQuestsInstalled) {
+            if (this.cachedFTBHasActive && this.cachedFTBText != null) {
+                int infoColor = (int) (0xCC * openProgress) << 24 | 0x88CCFF; // blueish hint for FTB
+                this.fontRenderer.drawStringWithShadow(this.cachedFTBText, infoX, infoStartY, infoColor);
+                drewFTB = true;
+            } else {
+                String hintKey = "yause.ftbquests.unavailable";
+                String hint = I18n.format(hintKey);
+                if (hint != null && hint.equals(hintKey)) {
+                    hint = "No active chapter";
+                }
+                int hintColor = (int) (0xAA * openProgress) << 24 | 0x888888;
+                this.fontRenderer.drawStringWithShadow(hint, infoX, infoStartY, hintColor);
+                drewFTB = true;
+            }
+        }
+
+        // Draw the vanilla 'Time played' stat directly beneath the chapter/hint area
         if (VoxelMenuConfig.showPlaytime && this.mc.player != null) {
             Long ticks = this.cachedVanillaPlayTicks;
             if (ticks != null) {
                 long playSeconds = ticks / 20L; // vanilla stat stores ticks
                 String playtimeStr = formatPlaytime(playSeconds);
                 int infoColor = ((int)(0xCC * openProgress) << 24) | 0x999999;
-                int statsX = boxX + 14;
-                int titleHeightPx = (int)(this.fontRenderer.FONT_HEIGHT * 2.0f);
-                int playY = titleY + titleHeightPx + 6;
-                // Display exactly 'Time played: <value>' so it aligns with the Statistics screen
-                this.fontRenderer.drawStringWithShadow("Time played: " + playtimeStr.replace("Playtime: ", ""), statsX, playY, infoColor);
-            }
-        }
-
-        // Optional FTB-Quests integration (soft, reflection-based) — we cache results on open to reduce overhead
-        if (VoxelMenuConfig.enableQuests && com.thevoxelbox.yause.VoxelMenu.ftbQuestsInstalled) {
-            // compute common y coordinate for the FTB message/hint area
-            int ftbY = boxY + 28 + (int)(this.fontRenderer.FONT_HEIGHT * 2.0f) + 6;
-            // ftbY remains directly below the title area
-            if (this.cachedFTBHasActive && this.cachedFTBText != null) {
-                int infoColor = (int) (0xCC * openProgress) << 24 | 0x88CCFF; // blueish hint for FTB
-                this.fontRenderer.drawStringWithShadow(this.cachedFTBText, boxX + 14, ftbY, infoColor);
-            }
-            // If integration is enabled and the mod is installed, but we didn't find quests, show a short hint
-            else if (VoxelMenuConfig.enableQuests && com.thevoxelbox.yause.VoxelMenu.ftbQuestsInstalled) {
-                int hintY = ftbY;
-                String hintKey = "yause.ftbquests.unavailable";
-                String hint = I18n.format(hintKey);
-                // I18n.format returns the key verbatim when a translation is missing — fall back to an English message
-                if (hint != null && hint.equals(hintKey)) {
-                    hint = "No active chapter";
-                }
-                int hintColor = (int) (0xAA * openProgress) << 24 | 0x888888;
-                this.fontRenderer.drawStringWithShadow(hint, boxX + 14, hintY, hintColor);
+                int playY = infoStartY + (drewFTB ? (this.fontRenderer.FONT_HEIGHT + 4) : 0);
+                this.fontRenderer.drawStringWithShadow("Time played: " + playtimeStr.replace("Playtime: ", ""), infoX, playY, infoColor);
             }
         }
 
