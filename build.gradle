@@ -513,6 +513,8 @@ tasks.register('installToInstanceMods', Copy) {
     }
     into instanceModsDir
 
+    onlyIf { instanceModsDir.exists() }
+
     doFirst {
         if (!instanceModsDir.exists()) {
             logger.lifecycle("installToInstanceMods: destination does not exist, creating: ${instanceModsDir}")
