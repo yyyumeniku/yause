@@ -519,8 +519,24 @@ public class GuiIngameMenuVoxelBox extends GuiIngameMenu {
         long minutes = (seconds % 3600L) / 60L;
         long secs = seconds % 60L;
 
-        // Always show days:HH:MM:SS (zero-padded hours/minutes/seconds)
-        return String.format("%dd %02d:%02d:%02d", days, hours, minutes, secs);
+        StringBuilder sb = new StringBuilder();
+        if (days > 0) {
+            sb.append(days).append("d");
+            if (hours > 0) sb.append(' ').append(hours).append("h");
+            if (minutes > 0) sb.append(' ').append(minutes).append("m");
+            if (secs > 0) sb.append(' ').append(secs).append("s");
+        } else if (hours > 0) {
+            sb.append(hours).append("h");
+            if (minutes > 0) sb.append(' ').append(minutes).append("m");
+            if (secs > 0) sb.append(' ').append(secs).append("s");
+        } else if (minutes > 0) {
+            sb.append(minutes).append("m");
+            if (secs > 0) sb.append(' ').append(secs).append("s");
+        } else {
+            sb.append(secs).append("s");
+        }
+
+        return sb.toString();
     }
 
     // FTBU reflection helpers removed.

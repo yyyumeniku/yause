@@ -58,7 +58,8 @@ public class VoxelMenu {
         ftbQuestsInstalled = Loader.isModLoaded("ftbquests");
         ftbUtilitiesInstalled = Loader.isModLoaded("ftbutilities");
         // One-time FTB detection: print once at mod load
-        LOGGER.info("FTB integration - ftbquests: {}, ftbutilities: {}", ftbQuestsInstalled, ftbUtilitiesInstalled);
+        // Keep this information at debug level to avoid noisy INFO logs during normal runs
+        LOGGER.debug("FTB integration - ftbquests: {}, ftbutilities: {}", ftbQuestsInstalled, ftbUtilitiesInstalled);
 
         // Clear, actionable message if FTBU is not present (we made FTBU optional). This makes it explicit
         // in the logs that FTBU features (playtime) will be disabled and why the UI may not show playtime.
