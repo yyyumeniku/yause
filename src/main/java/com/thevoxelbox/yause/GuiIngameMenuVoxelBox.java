@@ -22,13 +22,11 @@ public class GuiIngameMenuVoxelBox extends GuiIngameMenu {
     private boolean isClosing = false;
     private long closeStartTimeMs = -1;
     private int closeDurationMs = com.thevoxelbox.yause.config.VoxelMenuConfig.closeAnimationMs;
-    // Lightweight client-side vanilla playtime (ticks) tracking and display
-    // - basePlayTicks: cached value read from vanilla StatList.PLAY_ONE_MINUTE on menu open
-    // - sessionPlayTicks: increments while the pause menu is open and the game is running
-    private long basePlayTicks = -1L; // -1 = unavailable
-    private long sessionPlayTicks = 0L; // ticks accumulated since menu opened
-    private long sessionPlaySeconds = 0L; // seconds accumulator for per-second refresh
-    private long lastPlayUpdateMs = 0L; // last time we updated the seconds counter (ms)
+    // Cached vanilla playtime (ticks) read from the client's statistics manager.
+    // We refresh this once per second while the menu is open so the UI matches
+    // the vanilla Statistics screen exactly (no local session offsets).
+    private Long cachedVanillaPlayTicks = null;
+    private long lastVanillaReadMs = 0L; // last time the cached stat was refreshed
     // cached info from FTB-Quests and FTB-Utilities
     private String cachedFTBText = null;
     private boolean cachedFTBHasActive = false;
@@ -81,14 +79,11 @@ public class GuiIngameMenuVoxelBox extends GuiIngameMenu {
         // Update durations from config in case user changed them in the config screen
         this.openDurationMs = com.thevoxelbox.yause.config.VoxelMenuConfig.openAnimationMs;
         this.closeDurationMs = com.thevoxelbox.yause.config.VoxelMenuConfig.closeAnimationMs;
-        // Initialize lightweight vanilla playtime tracking when enabled by config
-        this.basePlayTicks = -1L;
-        this.sessionPlayTicks = 0L;
-        this.sessionPlaySeconds = 0L;
-        this.lastPlayUpdateMs = net.minecraft.client.Minecraft.getSystemTime();
+        // Initialize cached vanilla stat (best-effort) and set last read time
+        this.cachedVanillaPlayTicks = null;
+        this.lastVanillaReadMs = net.minecraft.client.Minecraft.getSystemTime();
         if (VoxelMenuConfig.showPlaytime && this.mc != null && this.mc.player != null) {
-            Long v = getVanillaPlayTicks();
-            this.basePlayTicks = v == null ? -1L : v.longValue();
+            this.cachedVanillaPlayTicks = getVanillaPlayTicks();
         }
 
         if (VoxelMenuConfig.enableQuests && com.thevoxelbox.yause.VoxelMenu.ftbQuestsInstalled) {
@@ -437,25 +432,16 @@ public class GuiIngameMenuVoxelBox extends GuiIngameMenu {
 
         // Vanilla playtime display (client-side only)
         if (VoxelMenuConfig.showPlaytime && this.mc.player != null) {
-            long baseTicks = this.basePlayTicks;
-            long totalTicks = (baseTicks >= 0L ? baseTicks : 0L) + this.sessionPlayTicks;
-            if (baseTicks >= 0L || this.sessionPlaySeconds > 0L) {
-                // playSeconds reflects the player's total time in the world (vanilla stat = "time played")
-                long playSeconds = (baseTicks >= 0L ? baseTicks / 20L : 0L) + this.sessionPlaySeconds;
+            Long ticks = this.cachedVanillaPlayTicks;
+            if (ticks != null) {
+                long playSeconds = ticks / 20L; // vanilla stat stores ticks
                 String playtimeStr = formatPlaytime(playSeconds);
                 int infoColor = ((int)(0xCC * openProgress) << 24) | 0x999999;
                 int statsX = boxX + 14;
                 int titleHeightPx = (int)(this.fontRenderer.FONT_HEIGHT * 2.0f);
                 int playY = titleY + titleHeightPx + 6;
-                this.fontRenderer.drawStringWithShadow(playtimeStr, statsX, playY, infoColor);
-                // show the vanilla/time-played (timelapse) + seconds-since-menu-opened for clarity
-                String elapsed = "Since menu opened: " + this.sessionPlaySeconds + "s";
-                // Timelapse — explicit label to indicate the stat-based world playtime
-                String timelapse = "Time played (world): " + playtimeStr.replace("Playtime: ", "");
-                int elapsedY = playY + this.fontRenderer.FONT_HEIGHT + 2;
-                // Draw timelapse above the simple elapsed seconds to emphasize the stat
-                this.fontRenderer.drawStringWithShadow(timelapse, statsX, elapsedY, infoColor);
-                this.fontRenderer.drawStringWithShadow(elapsed, statsX, elapsedY + this.fontRenderer.FONT_HEIGHT + 2, infoColor);
+                // Display exactly 'Time played: <value>' so it aligns with the Statistics screen
+                this.fontRenderer.drawStringWithShadow("Time played: " + playtimeStr.replace("Playtime: ", ""), statsX, playY, infoColor);
             }
         }
 
@@ -593,11 +579,9 @@ public class GuiIngameMenuVoxelBox extends GuiIngameMenu {
     public void onGuiClosed() {
         // Release cached values to free small amounts of memory (strings, boxed Longs)
         this.cachedFTBText = null;
-        // Clear playtime caches for the next open
-        this.basePlayTicks = -1L;
-        this.sessionPlayTicks = 0L;
-        this.sessionPlaySeconds = 0L;
-        this.lastPlayUpdateMs = 0L;
+        // Clear cached vanilla playtime so the next open reads fresh
+        this.cachedVanillaPlayTicks = null;
+        this.lastVanillaReadMs = 0L;
         super.onGuiClosed();
     }
 
@@ -608,17 +592,12 @@ public class GuiIngameMenuVoxelBox extends GuiIngameMenu {
         // Increment session tick counter while pause menu is open so playtime updates in real-time.
         // Only increment when the game is not paused (so we don't add ticks during single-player pause).
         if (this.openStartTimeMs >= 0 && !this.isClosing && this.mc.player != null) {
-            // Update the per-second time-lapse regardless of pause so the UI feels live.
+            // Refresh the cached vanilla stat once per second so the pause menu
+            // shows exactly what the Statistics screen shows (no local offsets).
             long now = net.minecraft.client.Minecraft.getSystemTime();
-            if (now - this.lastPlayUpdateMs >= 1000L) {
-                long deltaMs = now - this.lastPlayUpdateMs;
-                long deltaSeconds = Math.max(1L, deltaMs / 1000L);
-                this.sessionPlaySeconds += deltaSeconds;
-                this.lastPlayUpdateMs = now;
-            }
-            // Only increment tick-based sessionPlayTicks when the client is not paused
-            if (!this.mc.isGamePaused()) {
-                ++this.sessionPlayTicks; // ticks accumulate each tick
+            if (now - this.lastVanillaReadMs >= 1000L) {
+                this.cachedVanillaPlayTicks = getVanillaPlayTicks();
+                this.lastVanillaReadMs = now;
             }
         }
 

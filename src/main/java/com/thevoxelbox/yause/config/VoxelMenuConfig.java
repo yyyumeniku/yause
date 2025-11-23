@@ -27,6 +27,8 @@ public class VoxelMenuConfig {
     // New flags: enableQuests controls whether FTB-Quests hints are shown in the pause
     // menu. Playtime is governed by showPlaytime and requires FTBU at runtime.
     public static boolean enableQuests;
+    // When true, show vanilla client-side playtime in the pause menu
+    public static boolean showPlaytime;
     // Animation/placement configuration
     public static int menuOffsetX;
     public static int openAnimationMs;
@@ -108,6 +110,16 @@ public class VoxelMenuConfig {
                 CATEGORY_MENU,
                 true,
                 "Enable FTB-Quests hints in the pause menu when FTB-Quests is present."
+            );
+
+                    // Re-enable playtime (vanilla-based) as a lightweight client-side feature.
+                    // The playtime display will read vanilla StatList.PLAY_ONE_MINUTE on menu open
+                    // and update in real-time while the pause menu is open. This is client-side only.
+            showPlaytime = config.getBoolean(
+                "showPlaytime",
+                CATEGORY_MENU,
+                true,
+                "Show vanilla playtime in the pause menu (client-side; updates in real-time)."
             );
             
         } catch (Exception e) {
