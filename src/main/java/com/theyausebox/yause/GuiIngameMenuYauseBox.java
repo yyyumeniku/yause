@@ -604,9 +604,9 @@ public class GuiIngameMenuYauseBox extends GuiIngameMenu {
         ++this.updateCounter;
         // Increment session tick counter while pause menu is open so playtime updates in real-time.
         // Only increment when the game is not paused (so we don't add ticks during single-player pause).
-        if (this.openStartTimeMs >= 0 && !this.isClosing && this.mc.player != null) {
-            // Refresh the cached vanilla stat once per second so the pause menu
-            // shows exactly what the Statistics screen shows (no local offsets).
+        if (YauseMenuConfig.showPlaytime && this.mc.player != null) {
+            // Refresh the cached vanilla stat once per second while the pause menu
+            // is open so the displayed value updates in near real-time.
             long now = net.minecraft.client.Minecraft.getSystemTime();
             if (now - this.lastVanillaReadMs >= 1000L) {
                 this.cachedVanillaPlayTicks = getVanillaPlayTicks();
