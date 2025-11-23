@@ -525,9 +525,17 @@ tasks.register('installToInstanceMods', Copy) {
     }
 }
 
-// Run the installation task automatically after a successful 'build'.
-tasks.named('build') {
-    finalizedBy 'installToInstanceMods'
+// Run the installation task automatically after a successful 'build', but only
+// when a real developer instance mods folder is present. This keeps CI builds
+// (GitHub Actions) from failing when the preconfigured dev path doesn't exist.
+if (instanceModsDir.exists()) {
+    tasks.named('build') {
+        finalizedBy 'installToInstanceMods'
+    }
+} else {
+    // If the path doesn't exist, we intentionally skip wiring this task to 'build'.
+    // Developers can still call the task explicitly and override -PinstanceModsPath.
+    logger.lifecycle("Skipping automatic installToInstanceMods (destination not found: ${instanceModsDir})")
 }
 
 // Convenience task to fetch the latest logs from a developer instance for diagnosis.
