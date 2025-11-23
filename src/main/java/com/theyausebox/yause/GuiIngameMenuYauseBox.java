@@ -26,7 +26,10 @@ public class GuiIngameMenuYauseBox extends GuiIngameMenu {
     // We refresh this once per second while the menu is open so the UI matches
     // the vanilla Statistics screen exactly (no local session offsets).
     private Long cachedVanillaPlayTicks = null;
-    private long lastVanillaReadMs = 0L; // last time the cached stat was refreshed
+    private long lastVanillaReadMs = -1L; // last time the cached stat was refreshed (ms) - -1 = not set
+    // last value we displayed to the user (ticks). Used to prevent the UI from
+    // ever showing a lower value due to timing/rounding races.
+    private long lastDisplayedPlayTicks = -1L;
     // cached info from FTB-Quests and FTB-Utilities
     private String cachedFTBText = null;
     private boolean cachedFTBHasActive = false;
@@ -81,9 +84,15 @@ public class GuiIngameMenuYauseBox extends GuiIngameMenu {
         this.closeDurationMs = com.theyausebox.yause.config.YauseMenuConfig.closeAnimationMs;
         // Initialize cached vanilla stat (best-effort) and set last read time
         this.cachedVanillaPlayTicks = null;
-        this.lastVanillaReadMs = net.minecraft.client.Minecraft.getSystemTime();
+        // Initialize last read timestamp to -1 (unknown) so we can set it reliably
+        // once we successfully read the vanilla stat. This avoids stale deltas
+        // when the initial read returns late or null.
+        this.lastVanillaReadMs = -1L;
         if (YauseMenuConfig.showPlaytime && this.mc != null && this.mc.player != null) {
             this.cachedVanillaPlayTicks = getVanillaPlayTicks();
+            if (this.cachedVanillaPlayTicks != null) {
+                this.lastVanillaReadMs = net.minecraft.client.Minecraft.getSystemTime();
+            }
         }
 
         if (YauseMenuConfig.enableQuests && com.theyausebox.yause.YauseMenu.ftbQuestsInstalled) {
@@ -474,14 +483,31 @@ public class GuiIngameMenuYauseBox extends GuiIngameMenu {
         // delta (derived from elapsed milliseconds) so the UI updates smoothly and
         // doesn't wait for an explicit server/stat sync to show movement.
         if (YauseMenuConfig.showPlaytime && this.mc.player != null) {
-            long baseTicks = (this.cachedVanillaPlayTicks == null) ? 0L : this.cachedVanillaPlayTicks.longValue();
+            long baseTicks = (this.cachedVanillaPlayTicks == null) ? -1L : this.cachedVanillaPlayTicks.longValue();
             long nowMs = net.minecraft.client.Minecraft.getSystemTime();
-            // Convert ms delta into ticks (1 tick ≈ 50ms) and clamp to >= 0
-            long extraTicks = (this.lastVanillaReadMs > 0L) ? Math.max(0L, (nowMs - this.lastVanillaReadMs) / 50L) : 0L;
+            // Convert ms delta into ticks (1 tick ≈ 50ms). Use rounding so small
+            // fractional deltas don't cause consistent off-by-one negatives.
+            long extraTicks = (this.lastVanillaReadMs > 0L) ? Math.max(0L, Math.round((nowMs - this.lastVanillaReadMs) / 50.0D)) : 0L;
+
+            // If we couldn't read a base stat yet (e.g. immediately after joining), try a best-effort read now.
+            if (baseTicks < 0L) {
+                Long attempt = getVanillaPlayTicks();
+                if (attempt != null) {
+                    baseTicks = attempt.longValue();
+                    this.cachedVanillaPlayTicks = attempt;
+                    this.lastVanillaReadMs = nowMs;
+                } else {
+                    baseTicks = 0L; // fallback while we wait for a valid stat
+                }
+            }
+
             long displayTicks = baseTicks + extraTicks;
+            // Prevent the displayed value from ever going backwards due to read timing or rounding.
+            if (displayTicks < this.lastDisplayedPlayTicks) displayTicks = this.lastDisplayedPlayTicks;
+            this.lastDisplayedPlayTicks = displayTicks;
 
             long playSeconds = displayTicks / 20L; // vanilla stat stores ticks
-            String playtimeStr = formatPlaytime(playSeconds);
+            String playtimeStr = com.theyausebox.yause.utils.PlaytimeUtils.formatDurationSeconds(playSeconds);
             int infoColor = ((int)(0xCC * openProgress) << 24) | 0x999999;
             int playY = infoStartY + (drewFTB ? (this.fontRenderer.FONT_HEIGHT + 4) : 0);
             this.fontRenderer.drawStringWithShadow("Time played: " + playtimeStr.replace("Playtime: ", ""), infoX, playY, infoColor);
@@ -611,10 +637,11 @@ public class GuiIngameMenuYauseBox extends GuiIngameMenu {
         // Increment session tick counter while pause menu is open so playtime updates in real-time.
         // Only increment when the game is not paused (so we don't add ticks during single-player pause).
         if (YauseMenuConfig.showPlaytime && this.mc.player != null) {
-            // Refresh the cached vanilla stat once per second while the pause menu
+            // Refresh the cached vanilla stat while the pause menu
             // is open so the displayed value updates in near real-time.
+            // Check more frequently (500ms) to reduce visible lag vs the vanilla stats screen.
             long now = net.minecraft.client.Minecraft.getSystemTime();
-            if (now - this.lastVanillaReadMs >= 1000L) {
+            if (now - this.lastVanillaReadMs >= 500L) {
                 this.cachedVanillaPlayTicks = getVanillaPlayTicks();
                 this.lastVanillaReadMs = now;
             }
