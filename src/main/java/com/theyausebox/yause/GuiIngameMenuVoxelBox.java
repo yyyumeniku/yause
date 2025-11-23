@@ -469,22 +469,16 @@ public class GuiIngameMenuYauseBox extends GuiIngameMenu {
             }
         }
 
-        // Draw the vanilla 'Time played' stat directly beneath the chapter/hint area.
-        // Use the last authoritative cached stat as a base and add a small client-side
-        // delta (derived from elapsed milliseconds) so the UI updates smoothly and
-        // doesn't wait for an explicit server/stat sync to show movement.
+        // Draw the vanilla 'Time played' stat directly beneath the chapter/hint area
         if (YauseMenuConfig.showPlaytime && this.mc.player != null) {
-            long baseTicks = (this.cachedVanillaPlayTicks == null) ? 0L : this.cachedVanillaPlayTicks.longValue();
-            long nowMs = net.minecraft.client.Minecraft.getSystemTime();
-            // Convert ms delta into ticks (1 tick ≈ 50ms) and clamp to >= 0
-            long extraTicks = (this.lastVanillaReadMs > 0L) ? Math.max(0L, (nowMs - this.lastVanillaReadMs) / 50L) : 0L;
-            long displayTicks = baseTicks + extraTicks;
-
-            long playSeconds = displayTicks / 20L; // vanilla stat stores ticks
-            String playtimeStr = formatPlaytime(playSeconds);
-            int infoColor = ((int)(0xCC * openProgress) << 24) | 0x999999;
-            int playY = infoStartY + (drewFTB ? (this.fontRenderer.FONT_HEIGHT + 4) : 0);
-            this.fontRenderer.drawStringWithShadow("Time played: " + playtimeStr.replace("Playtime: ", ""), infoX, playY, infoColor);
+            Long ticks = this.cachedVanillaPlayTicks;
+            if (ticks != null) {
+                long playSeconds = ticks / 20L; // vanilla stat stores ticks
+                String playtimeStr = formatPlaytime(playSeconds);
+                int infoColor = ((int)(0xCC * openProgress) << 24) | 0x999999;
+                int playY = infoStartY + (drewFTB ? (this.fontRenderer.FONT_HEIGHT + 4) : 0);
+                this.fontRenderer.drawStringWithShadow("Time played: " + playtimeStr.replace("Playtime: ", ""), infoX, playY, infoColor);
+            }
         }
 
         // When FTBU isn't installed and the playtime feature is enabled, show a short
@@ -610,9 +604,9 @@ public class GuiIngameMenuYauseBox extends GuiIngameMenu {
         ++this.updateCounter;
         // Increment session tick counter while pause menu is open so playtime updates in real-time.
         // Only increment when the game is not paused (so we don't add ticks during single-player pause).
-        if (YauseMenuConfig.showPlaytime && this.mc.player != null) {
-            // Refresh the cached vanilla stat once per second while the pause menu
-            // is open so the displayed value updates in near real-time.
+        if (this.openStartTimeMs >= 0 && !this.isClosing && this.mc.player != null) {
+            // Refresh the cached vanilla stat once per second so the pause menu
+            // shows exactly what the Statistics screen shows (no local offsets).
             long now = net.minecraft.client.Minecraft.getSystemTime();
             if (now - this.lastVanillaReadMs >= 1000L) {
                 this.cachedVanillaPlayTicks = getVanillaPlayTicks();
