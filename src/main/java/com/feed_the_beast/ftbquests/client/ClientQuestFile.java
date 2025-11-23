@@ -1,7 +1,7 @@
-package com.thevoxelbox.yause.internal.orig.ftbquests.client;
+package com.theyausebox.yause.internal.orig.ftbquests.client;
 
-import com.thevoxelbox.yause.internal.orig.ftbquests.quest.Chapter;
-import com.thevoxelbox.yause.internal.orig.ftbquests.quest.QuestData;
+import com.theyausebox.yause.internal.orig.ftbquests.quest.Chapter;
+import com.theyausebox.yause.internal.orig.ftbquests.quest.QuestData;
 
 import java.util.List;
 
@@ -12,7 +12,7 @@ import java.util.List;
  *
  * NOTE: This is intentionally tiny — only the pieces we rely on.
  */
-public class ClientQuestFile extends com.thevoxelbox.yause.internal.orig.ftbquests.quest.QuestFile {
+public class ClientQuestFile extends com.theyausebox.yause.internal.orig.ftbquests.quest.QuestFile {
     // Real mod uses "ClientQuestFile.INSTANCE" — keep same name here (stub)
     public static ClientQuestFile INSTANCE = null;
 
@@ -24,7 +24,7 @@ public class ClientQuestFile extends com.thevoxelbox.yause.internal.orig.ftbques
      * our stub simply returns an empty list so menu code can still run when the real
      * mod isn't present. The menu will detect empty/absent results and show "no active".
      */
-    public java.util.List<Chapter> getVisibleChapters(com.thevoxelbox.yause.internal.orig.ftbquests.quest.QuestData data, boolean excludeEmpty) {
+    public java.util.List<Chapter> getVisibleChapters(com.theyausebox.yause.internal.orig.ftbquests.quest.QuestData data, boolean excludeEmpty) {
         return java.util.Collections.emptyList();
     }
 }
