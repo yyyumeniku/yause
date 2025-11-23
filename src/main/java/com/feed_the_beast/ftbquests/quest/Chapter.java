@@ -1,4 +1,4 @@
-package com.thevoxelbox.yause.internal.orig.ftbquests.quest;
+package com.theyausebox.yause.internal.orig.ftbquests.quest;
 
 /**
  * Minimal stub of FTB-Quests Chapter used by menu integration.
