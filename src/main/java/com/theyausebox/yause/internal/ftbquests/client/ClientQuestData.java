@@ -1,6 +1,6 @@
-package com.thevoxelbox.yause.internal.ftbquests.client;
+package com.theyausebox.yause.internal.ftbquests.client;
 
-import com.thevoxelbox.yause.internal.ftbquests.quest.QuestData;
+import com.theyausebox.yause.internal.ftbquests.quest.QuestData;
 import net.minecraft.entity.player.EntityPlayer;
 
 import java.util.Collections;
@@ -24,5 +24,5 @@ public class ClientQuestData extends QuestData {
     public String getDisplayName() { return "Player"; }
 
     @Override
-    public com.thevoxelbox.yause.internal.ftbquests.quest.QuestFile getFile() { return null; }
+    public com.theyausebox.yause.internal.ftbquests.quest.QuestFile getFile() { return null; }
 }

@@ -1,4 +1,4 @@
-package com.thevoxelbox.yause.proxy;
+package com.theyausebox.yause.proxy;
 
 import net.minecraftforge.fml.common.event.FMLInitializationEvent;
 import net.minecraftforge.fml.common.event.FMLPostInitializationEvent;

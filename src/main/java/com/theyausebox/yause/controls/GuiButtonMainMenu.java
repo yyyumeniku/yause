@@ -1,4 +1,4 @@
-package com.thevoxelbox.yause.controls;
+package com.theyausebox.yause.controls;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiButton;
@@ -32,7 +32,7 @@ public class GuiButtonMainMenu extends GuiButton {
         this.rightAlign = rightAlign;
         // update alpha falloff rate from configurable setting
         try {
-            this.alphaFalloffRate = (float) com.thevoxelbox.yause.config.VoxelMenuConfig.hoverAlphaFalloffRate;
+            this.alphaFalloffRate = (float) com.theyausebox.yause.config.YauseMenuConfig.hoverAlphaFalloffRate;
         } catch (Exception ignored) {
             // Keep default
         }
@@ -42,7 +42,7 @@ public class GuiButtonMainMenu extends GuiButton {
         if (this.visible) {
             // Refresh hover alpha falloff from config in case user changed it via config screen
             try {
-                this.alphaFalloffRate = (float) com.thevoxelbox.yause.config.VoxelMenuConfig.hoverAlphaFalloffRate;
+                this.alphaFalloffRate = (float) com.theyausebox.yause.config.YauseMenuConfig.hoverAlphaFalloffRate;
             } catch (Throwable ignored) {}
             // Use wall-clock delta so the hover easing is smooth when frame-rate
             // changes or when updateCounter/partialTick jitter occurs. Convert ms -> ticks
@@ -96,7 +96,7 @@ public class GuiButtonMainMenu extends GuiButton {
             boolean mouseOver = mouseX >= this.x && mouseY >= this.y && mouseX < this.x + this.width && mouseY < this.y + this.height;
             
             if (this.alpha > 0.0f) {
-                float fade = com.thevoxelbox.yause.GuiIngameMenuVoxelBox.currentOpenProgress;
+                float fade = com.theyausebox.yause.GuiIngameMenuYauseBox.currentOpenProgress;
                 // Use a single effective alpha when drawing so visual math is consistent
                 float effectiveAlpha = mouseOver ? 0.4f : this.alpha;
                 int baseAlphaVal = Math.round(255.0f * effectiveAlpha) & 0xFF;
@@ -113,7 +113,7 @@ public class GuiButtonMainMenu extends GuiButton {
     }
 
     public void drawButtonText(boolean mouseOver, Minecraft mc) {
-        float fade = com.thevoxelbox.yause.GuiIngameMenuVoxelBox.currentOpenProgress;
+        float fade = com.theyausebox.yause.GuiIngameMenuYauseBox.currentOpenProgress;
         int textColour = 0xFFFFFF;
         if (!this.enabled) {
             textColour = 0xA0A0A0;

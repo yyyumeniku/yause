@@ -1,12 +1,12 @@
-package com.thevoxelbox.yause.config;
+package com.theyausebox.yause.config;
 
-import com.thevoxelbox.yause.VoxelMenu;
+import com.theyausebox.yause.YauseMenu;
 import net.minecraftforge.common.config.Configuration;
 import net.minecraftforge.common.config.Property;
 
 import java.io.File;
 
-public class VoxelMenuConfig {
+public class YauseMenuConfig {
     
     private static Configuration config;
 
@@ -69,7 +69,7 @@ public class VoxelMenuConfig {
                 20,
                 0,
                 200,
-                "Horizontal offset of the VoxelMenu panel"
+                "Horizontal offset of the YauseMenu panel"
             );
 
             // Vertical offset removed from the configuration. Use a fixed default
@@ -123,7 +123,7 @@ public class VoxelMenuConfig {
             );
             
         } catch (Exception e) {
-            VoxelMenu.LOGGER.error("Error loading configuration", e);
+            YauseMenu.LOGGER.error("Error loading configuration", e);
         } finally {
             if (config.hasChanged()) {
                 config.save();

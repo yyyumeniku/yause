@@ -1,9 +1,9 @@
-package com.thevoxelbox.yause.internal.orig.ftbquests.quest;
+package com.theyausebox.yause.internal.orig.ftbquests.quest;
 
 import java.util.List;
 
 /**
- * Minimal stub of FTB-Quests QuestData used by VoxelMenu's lightweight integration.
+ * Minimal stub of FTB-Quests QuestData used by YauseMenu's lightweight integration.
  * This provides the minimal shape required for menu reflection to call methods such as
  * getDisplayName() and be passed around to chapter progress methods.
  */

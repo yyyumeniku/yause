@@ -1,6 +1,6 @@
-package com.thevoxelbox.yause;
+package com.theyausebox.yause;
 
-import com.thevoxelbox.yause.controls.GuiButtonPanel;
+import com.theyausebox.yause.controls.GuiButtonPanel;
 import net.minecraft.client.gui.GuiButton;
 import net.minecraft.client.gui.GuiIngameMenu;
 import net.minecraft.client.gui.GuiMainMenu;
@@ -10,18 +10,18 @@ import net.minecraft.client.gui.GuiShareToLan;
 import net.minecraft.client.gui.advancements.GuiScreenAdvancements;
 import net.minecraft.client.resources.I18n;
 // We no longer depend on vanilla StatList for FTBU reads — prefer FTBU keys and tolerant fallbacks.
-import com.thevoxelbox.yause.config.VoxelMenuConfig;
+import com.theyausebox.yause.config.YauseMenuConfig;
 
-public class GuiIngameMenuVoxelBox extends GuiIngameMenu {
+public class GuiIngameMenuYauseBox extends GuiIngameMenu {
     private GuiButtonPanel buttonPanelLeft;
     private int updateCounter = 0;
     private long openStartTimeMs = -1; // start time in ms for time-based animation
-    private int openDurationMs = com.thevoxelbox.yause.config.VoxelMenuConfig.openAnimationMs; // open duration in ms (time-based)
+    private int openDurationMs = com.theyausebox.yause.config.YauseMenuConfig.openAnimationMs; // open duration in ms (time-based)
     public static float currentOpenProgress = 1.0f; // used by buttons to fade during open
     // closing (fade-out) animation
     private boolean isClosing = false;
     private long closeStartTimeMs = -1;
-    private int closeDurationMs = com.thevoxelbox.yause.config.VoxelMenuConfig.closeAnimationMs;
+    private int closeDurationMs = com.theyausebox.yause.config.YauseMenuConfig.closeAnimationMs;
     // Cached vanilla playtime (ticks) read from the client's statistics manager.
     // We refresh this once per second while the menu is open so the UI matches
     // the vanilla Statistics screen exactly (no local session offsets).
@@ -40,7 +40,7 @@ public class GuiIngameMenuVoxelBox extends GuiIngameMenu {
     public void initGui() {
         this.buttonList.clear();
         // Vertical box margins and title spacing - anchored top-left
-            int marginLeft = com.thevoxelbox.yause.config.VoxelMenuConfig.menuOffsetX; // shift panel a few pixels to the right for final alignment
+            int marginLeft = com.theyausebox.yause.config.YauseMenuConfig.menuOffsetX; // shift panel a few pixels to the right for final alignment
             // `menuOffsetY` config option removed — use a fixed vertical offset instead.
             int marginTop = 10; // vertical offset (fixed)
             int marginBottom = 0; // full height
@@ -77,16 +77,16 @@ public class GuiIngameMenuVoxelBox extends GuiIngameMenu {
         // Start slide-in animation (time-based) so the pause menu slides in from the left
         this.openStartTimeMs = net.minecraft.client.Minecraft.getSystemTime();
         // Update durations from config in case user changed them in the config screen
-        this.openDurationMs = com.thevoxelbox.yause.config.VoxelMenuConfig.openAnimationMs;
-        this.closeDurationMs = com.thevoxelbox.yause.config.VoxelMenuConfig.closeAnimationMs;
+        this.openDurationMs = com.theyausebox.yause.config.YauseMenuConfig.openAnimationMs;
+        this.closeDurationMs = com.theyausebox.yause.config.YauseMenuConfig.closeAnimationMs;
         // Initialize cached vanilla stat (best-effort) and set last read time
         this.cachedVanillaPlayTicks = null;
         this.lastVanillaReadMs = net.minecraft.client.Minecraft.getSystemTime();
-        if (VoxelMenuConfig.showPlaytime && this.mc != null && this.mc.player != null) {
+        if (YauseMenuConfig.showPlaytime && this.mc != null && this.mc.player != null) {
             this.cachedVanillaPlayTicks = getVanillaPlayTicks();
         }
 
-        if (VoxelMenuConfig.enableQuests && com.thevoxelbox.yause.VoxelMenu.ftbQuestsInstalled) {
+        if (YauseMenuConfig.enableQuests && com.theyausebox.yause.YauseMenu.ftbQuestsInstalled) {
             updateFTBCache();
         }
         // (playtime removed) updateFTBCache will still be used for FTB Quests hints
@@ -105,7 +105,7 @@ public class GuiIngameMenuVoxelBox extends GuiIngameMenu {
                 clientQuestFileCls = Class.forName("com.feed_the_beast.ftbquests.client.ClientQuestFile");
             } catch (ClassNotFoundException ex) {
                 try {
-                    clientQuestFileCls = Class.forName("com.thevoxelbox.yause.internal.ftbquests.client.ClientQuestFile");
+                    clientQuestFileCls = Class.forName("com.theyausebox.yause.internal.ftbquests.client.ClientQuestFile");
                 } catch (ClassNotFoundException ex2) {
                     throw ex; // rethrow original so outer catch handles unavailability
                 }
@@ -116,7 +116,7 @@ public class GuiIngameMenuVoxelBox extends GuiIngameMenu {
             if (instance == null) {
                 if (!ftbQuestsMissingInstanceLogged) {
                     ftbQuestsMissingInstanceLogged = true;
-                    com.thevoxelbox.yause.VoxelMenu.LOGGER.debug("FTB Quests: ClientQuestFile.INSTANCE is null (no client instance available)");
+                    com.theyausebox.yause.YauseMenu.LOGGER.debug("FTB Quests: ClientQuestFile.INSTANCE is null (no client instance available)");
                 }
             }
 
@@ -124,7 +124,7 @@ public class GuiIngameMenuVoxelBox extends GuiIngameMenu {
             if (self == null) {
                 if (!ftbQuestsMissingSelfLogged) {
                     ftbQuestsMissingSelfLogged = true;
-                    com.thevoxelbox.yause.VoxelMenu.LOGGER.debug("FTB Quests: ClientQuestFile.self is null (no per-player quest data available)");
+                    com.theyausebox.yause.YauseMenu.LOGGER.debug("FTB Quests: ClientQuestFile.self is null (no per-player quest data available)");
                 }
                 return;
             }
@@ -136,7 +136,7 @@ public class GuiIngameMenuVoxelBox extends GuiIngameMenu {
                     questDataCls = Class.forName("com.feed_the_beast.ftbquests.quest.QuestData");
                 } catch (ClassNotFoundException ex) {
                     // if the real mod types aren't present, try our internal stub
-                    questDataCls = Class.forName("com.thevoxelbox.yause.internal.ftbquests.quest.QuestData");
+                    questDataCls = Class.forName("com.theyausebox.yause.internal.ftbquests.quest.QuestData");
                 }
                 java.lang.reflect.Method visibleChaptersMethod = null;
                 // method signature in QuestFile: List<Chapter> getVisibleChapters(QuestData data, boolean excludeEmpty)
@@ -208,7 +208,7 @@ public class GuiIngameMenuVoxelBox extends GuiIngameMenu {
             if (!ftbQuestsUnavailableLogged) {
                 ftbQuestsUnavailableLogged = true;
                 String msg = t.getMessage() == null ? t.getClass().getName() : t.getMessage();
-                com.thevoxelbox.yause.VoxelMenu.LOGGER.warn("FTB Quests reflection failed while reading quests: {}", msg);
+                com.theyausebox.yause.YauseMenu.LOGGER.warn("FTB Quests reflection failed while reading quests: {}", msg);
             }
         }
     }
@@ -310,7 +310,7 @@ public class GuiIngameMenuVoxelBox extends GuiIngameMenu {
         
             if (buttonText.equals(I18n.format("menu.returnToGame"))) {
             // If transitions are disabled, close instantly. Otherwise start fade-out closing animation.
-            if (com.thevoxelbox.yause.config.VoxelMenuConfig.disableTransitions) {
+            if (com.theyausebox.yause.config.YauseMenuConfig.disableTransitions) {
                 this.mc.displayGuiScreen(null);
                 this.mc.setIngameFocus();
                 return;
@@ -323,9 +323,9 @@ public class GuiIngameMenuVoxelBox extends GuiIngameMenu {
             this.mc.displayGuiScreen(new GuiOptions(this, this.mc.gameSettings));
         } else if (buttonText.equals(I18n.format("fml.menu.mods"))) {
             // Open Forge's mod list GUI — use helper to handle compatibility
-            boolean ok = com.thevoxelbox.yause.ForgeHandler.openModsList(this.mc, this);
+            boolean ok = com.theyausebox.yause.ForgeHandler.openModsList(this.mc, this);
             if (!ok) {
-                com.thevoxelbox.yause.VoxelMenu.LOGGER.warn("Failed to open mod list GUI via ForgeHandler");
+                com.theyausebox.yause.YauseMenu.LOGGER.warn("Failed to open mod list GUI via ForgeHandler");
             }
         } else if (buttonText.equals(I18n.format("gui.advancements"))) {
             this.mc.displayGuiScreen(new GuiScreenAdvancements(this.mc.player.connection.getAdvancementManager()));
@@ -334,7 +334,7 @@ public class GuiIngameMenuVoxelBox extends GuiIngameMenu {
                 // Open the vanilla stats screen (MCP: GuiStats / obfuscated may differ); use known class name for 1.12
                 this.mc.displayGuiScreen(new net.minecraft.client.gui.achievement.GuiStats(this, this.mc.player.getStatFileWriter()));
             } catch (Throwable t) {
-                com.thevoxelbox.yause.VoxelMenu.LOGGER.warn("Failed to open vanilla Stats GUI: {}", t.getMessage());
+                com.theyausebox.yause.YauseMenu.LOGGER.warn("Failed to open vanilla Stats GUI: {}", t.getMessage());
             }
         } else if (buttonText.equals(I18n.format("menu.shareToLan"))) {
             this.mc.displayGuiScreen(new GuiShareToLan(this));
@@ -355,7 +355,7 @@ public class GuiIngameMenuVoxelBox extends GuiIngameMenu {
     public void drawScreen(int mouseX, int mouseY, float partialTicks) {
         // Don't draw default darkened background - we want transparency
         // Box and panel metrics (flush top-left box) - keep consistent with initGui
-        int marginLeft = com.thevoxelbox.yause.config.VoxelMenuConfig.menuOffsetX; // moved to the right by configured amount
+        int marginLeft = com.theyausebox.yause.config.YauseMenuConfig.menuOffsetX; // moved to the right by configured amount
         // Vertical offset config removed — use a constant value for vertical placement
         int marginTop = 10;
         int marginBottom = 0;
@@ -391,7 +391,7 @@ public class GuiIngameMenuVoxelBox extends GuiIngameMenu {
         }
 
         // If transitions are disabled in config, skip animations entirely
-        if (com.thevoxelbox.yause.config.VoxelMenuConfig.disableTransitions) {
+        if (com.theyausebox.yause.config.YauseMenuConfig.disableTransitions) {
             openProgress = 1.0f;
         }
 
@@ -452,7 +452,7 @@ public class GuiIngameMenuVoxelBox extends GuiIngameMenu {
         // First draw the optional FTB-Quests chapter/hint at infoStartY. If we drew
         // a chapter/hint we'll shift the 'Time played' stat below it to avoid overlap.
         boolean drewFTB = false;
-        if (VoxelMenuConfig.enableQuests && com.thevoxelbox.yause.VoxelMenu.ftbQuestsInstalled) {
+        if (YauseMenuConfig.enableQuests && com.theyausebox.yause.YauseMenu.ftbQuestsInstalled) {
             if (this.cachedFTBHasActive && this.cachedFTBText != null) {
                 int infoColor = (int) (0xCC * openProgress) << 24 | 0x88CCFF; // blueish hint for FTB
                 this.fontRenderer.drawStringWithShadow(this.cachedFTBText, infoX, infoStartY, infoColor);
@@ -470,7 +470,7 @@ public class GuiIngameMenuVoxelBox extends GuiIngameMenu {
         }
 
         // Draw the vanilla 'Time played' stat directly beneath the chapter/hint area
-        if (VoxelMenuConfig.showPlaytime && this.mc.player != null) {
+        if (YauseMenuConfig.showPlaytime && this.mc.player != null) {
             Long ticks = this.cachedVanillaPlayTicks;
             if (ticks != null) {
                 long playSeconds = ticks / 20L; // vanilla stat stores ticks
@@ -483,7 +483,7 @@ public class GuiIngameMenuVoxelBox extends GuiIngameMenu {
 
         // When FTBU isn't installed and the playtime feature is enabled, show a short
         // hint telling the user playtime requires FTBU. This is controlled by the
-        // Playtime display is controlled by VoxelMenuConfig.showPlaytime and requires FTB Utilities at runtime
+        // Playtime display is controlled by YauseMenuConfig.showPlaytime and requires FTB Utilities at runtime
         // warning flags.
         // The explicit short 'FTBU required' message has been removed from the config
         // schema; the menu no longer displays this separate hint.
@@ -543,7 +543,7 @@ public class GuiIngameMenuVoxelBox extends GuiIngameMenu {
     @Override
     protected void mouseClicked(int mouseX, int mouseY, int mouseButton) throws java.io.IOException {
         // Adjust mouse x for the open animation translate so clicks map to drawn positions
-        int boxX = com.thevoxelbox.yause.config.VoxelMenuConfig.menuOffsetX;
+        int boxX = com.theyausebox.yause.config.YauseMenuConfig.menuOffsetX;
         int slideDistance = 200 + boxX;
         float openProgress = 1.0f;
         if (this.openStartTimeMs >= 0) {
@@ -557,7 +557,7 @@ public class GuiIngameMenuVoxelBox extends GuiIngameMenu {
 
     @Override
     public void mouseReleased(int mouseX, int mouseY, int state) {
-        int boxX = com.thevoxelbox.yause.config.VoxelMenuConfig.menuOffsetX;
+        int boxX = com.theyausebox.yause.config.YauseMenuConfig.menuOffsetX;
         int slideDistance = 200 + boxX;
         float openProgress = 1.0f;
         if (this.openStartTimeMs >= 0) {
@@ -574,7 +574,7 @@ public class GuiIngameMenuVoxelBox extends GuiIngameMenu {
         // ESC (keyCode 1) triggers the close animation as well — if transitions are disabled,
         // close immediately.
         if (keyCode == 1) {
-            if (com.thevoxelbox.yause.config.VoxelMenuConfig.disableTransitions) {
+            if (com.theyausebox.yause.config.YauseMenuConfig.disableTransitions) {
                 this.mc.displayGuiScreen(null);
                 this.mc.setIngameFocus();
                 return;
@@ -617,7 +617,7 @@ public class GuiIngameMenuVoxelBox extends GuiIngameMenu {
         // Periodic refresh of FTBU play ticks and FTB-Quests cache while the menu is open (reduce reflection frequency)
         if (this.openStartTimeMs >= 0 && !this.isClosing) {
             long now = net.minecraft.client.Minecraft.getSystemTime();
-            if (VoxelMenuConfig.enableQuests && com.thevoxelbox.yause.VoxelMenu.ftbQuestsInstalled) {
+            if (YauseMenuConfig.enableQuests && com.theyausebox.yause.YauseMenu.ftbQuestsInstalled) {
                 updateFTBCache();
             }
         }

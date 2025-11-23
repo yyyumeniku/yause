@@ -1,8 +1,8 @@
-package com.thevoxelbox.yause.proxy;
+package com.theyausebox.yause.proxy;
 
-import com.thevoxelbox.yause.VoxelMenu;
-import com.thevoxelbox.yause.config.VoxelMenuConfig;
-import com.thevoxelbox.yause.event.GuiEventHandler;
+import com.theyausebox.yause.YauseMenu;
+import com.theyausebox.yause.config.YauseMenuConfig;
+import com.theyausebox.yause.event.GuiEventHandler;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.fml.common.event.FMLInitializationEvent;
 import net.minecraftforge.fml.common.event.FMLPostInitializationEvent;
@@ -15,9 +15,9 @@ public class ClientProxy extends CommonProxy {
         super.preInit(event);
         
         // Initialize configuration
-        VoxelMenuConfig.init(event.getSuggestedConfigurationFile());
+        YauseMenuConfig.init(event.getSuggestedConfigurationFile());
         
-        VoxelMenu.LOGGER.info("Yause client pre-initialization complete");
+        YauseMenu.LOGGER.info("Yause client pre-initialization complete");
     }
     
     @Override
@@ -27,7 +27,7 @@ public class ClientProxy extends CommonProxy {
         // Register event handlers
         MinecraftForge.EVENT_BUS.register(new GuiEventHandler());
         
-        VoxelMenu.LOGGER.info("Yause client initialization complete");
+        YauseMenu.LOGGER.info("Yause client initialization complete");
     }
     
     @Override
@@ -35,6 +35,6 @@ public class ClientProxy extends CommonProxy {
         super.postInit(event);
         // FTBU playtime listeners removed — playtime feature deleted per configuration
         
-        VoxelMenu.LOGGER.info("Yause client post-initialization complete");
+        YauseMenu.LOGGER.info("Yause client post-initialization complete");
     }
 }
