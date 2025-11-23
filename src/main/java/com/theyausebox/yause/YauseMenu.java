@@ -14,7 +14,8 @@ import net.minecraftforge.fml.common.Loader;
     modid = YauseMenu.MODID,
     name = YauseMenu.NAME,
     version = YauseMenu.VERSION,
-    clientSideOnly = true,
+    // This mod must be installed on both sides for the playtime feature to work.
+    // We used to run client-only, but to track world playtime we require a server component as well.
     // Make FTBU optional so the mod can still start while we show a clear warning if FTBU is missing.
     dependencies = "after:ftbutilities",
     guiFactory = "com.theyausebox.yause.config.YauseMenuGuiFactory"
@@ -64,8 +65,9 @@ public class YauseMenu {
         // Clear, actionable message if FTBU is not present (we made FTBU optional). This makes it explicit
         // in the logs that FTBU features (playtime) will be disabled and why the UI may not show playtime.
             if (!ftbUtilitiesInstalled) {
-                // FTBU is optional — but we require FTBU for the playtime feature. When missing, playtime will be disabled.
-                LOGGER.info("FTB Utilities (ftbutilities) not found — FTBU-only playtime display will be disabled.");
+                // FTBU is optional — silence noisy INFO-level messages about optional integrations.
+                // Keep an unobtrusive debug message in case a developer needs to diagnose why playtime is disabled.
+                LOGGER.debug("FTB Utilities (ftbutilities) not found — FTBU-only playtime display will be disabled.");
         }
         proxy.postInit(event);
     }

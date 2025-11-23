@@ -11,6 +11,10 @@ import net.minecraft.client.gui.advancements.GuiScreenAdvancements;
 import net.minecraft.client.resources.I18n;
 // We no longer depend on vanilla StatList for FTBU reads — prefer FTBU keys and tolerant fallbacks.
 import com.theyausebox.yause.config.YauseMenuConfig;
+import com.theyausebox.yause.network.NetworkHandler;
+import com.theyausebox.yause.network.RequestPlaytimeMessage;
+import com.theyausebox.yause.client.ClientPlaytimeCache;
+import com.theyausebox.yause.utils.PlaytimeUtils;
 
 public class GuiIngameMenuYauseBox extends GuiIngameMenu {
     private GuiButtonPanel buttonPanelLeft;
@@ -22,11 +26,12 @@ public class GuiIngameMenuYauseBox extends GuiIngameMenu {
     private boolean isClosing = false;
     private long closeStartTimeMs = -1;
     private int closeDurationMs = com.theyausebox.yause.config.YauseMenuConfig.closeAnimationMs;
-    // Cached vanilla playtime (ticks) read from the client's statistics manager.
-    // We refresh this once per second while the menu is open so the UI matches
-    // the vanilla Statistics screen exactly (no local session offsets).
-    private Long cachedVanillaPlayTicks = null;
-    private long lastVanillaReadMs = -1L; // last time the cached stat was refreshed (ms) - -1 = not set
+    // Client-side playtime state coming from server response. The pause menu will
+    // request the server's authoritative playtime when opened and display it only
+    // when the server responds. This ensures timeplayed is shown only when both
+    // client and server have the mod installed.
+    private boolean serverPlaytimeRequested = false;
+    private boolean serverPauseNotified = false;
     // last value we displayed to the user (ticks). Used to prevent the UI from
     // ever showing a lower value due to timing/rounding races.
     private long lastDisplayedPlayTicks = -1L;
@@ -82,16 +87,21 @@ public class GuiIngameMenuYauseBox extends GuiIngameMenu {
         // Update durations from config in case user changed them in the config screen
         this.openDurationMs = com.theyausebox.yause.config.YauseMenuConfig.openAnimationMs;
         this.closeDurationMs = com.theyausebox.yause.config.YauseMenuConfig.closeAnimationMs;
-        // Initialize cached vanilla stat (best-effort) and set last read time
-        this.cachedVanillaPlayTicks = null;
-        // Initialize last read timestamp to -1 (unknown) so we can set it reliably
-        // once we successfully read the vanilla stat. This avoids stale deltas
-        // when the initial read returns late or null.
-        this.lastVanillaReadMs = -1L;
-        if (YauseMenuConfig.showPlaytime && this.mc != null && this.mc.player != null) {
-            this.cachedVanillaPlayTicks = getVanillaPlayTicks();
-            if (this.cachedVanillaPlayTicks != null) {
-                this.lastVanillaReadMs = net.minecraft.client.Minecraft.getSystemTime();
+        // Reset server-playtime request state and last displayed ticks
+        this.serverPlaytimeRequested = false;
+        this.lastDisplayedPlayTicks = -1L;
+        // Request server playtime if configured (this will only get a response if
+        // the server also has the mod installed and registered the network handler).
+        if (YauseMenuConfig.showPlaytime && this.mc != null && this.mc.player != null && NetworkHandler.get() != null) {
+            try {
+                NetworkHandler.get().sendToServer(new RequestPlaytimeMessage());
+                this.serverPlaytimeRequested = true;
+                try {
+                    NetworkHandler.get().sendToServer(new com.theyausebox.yause.network.PauseStateMessage(true));
+                    this.serverPauseNotified = true;
+                } catch (Throwable ignore) { }
+            } catch (Throwable ignore) {
+                // Network channel not available or server didn't register handler; ignore and don't display
             }
         }
 
@@ -223,70 +233,7 @@ public class GuiIngameMenuYauseBox extends GuiIngameMenu {
     }
     
 
-    // =========================
-    // Vanilla playtime helpers
-    // =========================
-
-    // Read vanilla playtime (StatList.PLAY_ONE_MINUTE) from the client's stats manager.
-    // Returns ticks or null if unavailable.
-    private Long getVanillaPlayTicks() {
-        try {
-            if (this.mc == null || this.mc.player == null) return null;
-            net.minecraft.stats.StatBase stat = net.minecraft.stats.StatList.PLAY_ONE_MINUTE;
-            if (stat == null) return null;
-
-            // Try the direct API first (MCP mapping): StatFileWriter.readStat(StatBase)
-            try {
-                Object statsManagerDirect = this.mc.player.getStatFileWriter();
-                if (statsManagerDirect != null) {
-                    try {
-                        java.lang.reflect.Method readStat = statsManagerDirect.getClass().getMethod("readStat", net.minecraft.stats.StatBase.class);
-                        Object val = readStat.invoke(statsManagerDirect, stat);
-                        if (val instanceof Number) return ((Number) val).longValue();
-                        if (val != null) return Long.parseLong(val.toString());
-                    } catch (NoSuchMethodException | IllegalAccessException | java.lang.reflect.InvocationTargetException e) {
-                        // fall through to reflection approach below
-                    }
-                }
-            } catch (Throwable ignored) {
-                // fall through to reflection approach below
-            }
-
-            Object statsManager = null;
-            try {
-                // fallback: try to access likely field names via reflection
-                java.lang.reflect.Field f = this.mc.player.getClass().getDeclaredField("statFileWriter");
-                f.setAccessible(true);
-                statsManager = f.get(this.mc.player);
-            } catch (Throwable ignored2) { }
-
-            if (statsManager == null) return null;
-
-            if (statsManager != null) {
-                try {
-                    java.lang.reflect.Method readStat = statsManager.getClass().getMethod("readStat", net.minecraft.stats.StatBase.class);
-                    Object val = readStat.invoke(statsManager, stat);
-                    if (val instanceof Number) return ((Number) val).longValue();
-                    if (val != null) return Long.parseLong(val.toString());
-                } catch (NoSuchMethodException e) {
-                    // Best effort: scan for a single-arg method that accepts something named like Stat
-                    for (java.lang.reflect.Method m : statsManager.getClass().getMethods()) {
-                        if (m.getParameterCount() == 1) {
-                            Class<?> p = m.getParameterTypes()[0];
-                            if (p == net.minecraft.stats.StatBase.class || p.getName().toLowerCase().contains("stat")) {
-                                try {
-                                    Object val = m.invoke(statsManager, stat);
-                                    if (val instanceof Number) return ((Number) val).longValue();
-                                    if (val != null) return Long.parseLong(val.toString());
-                                } catch (Throwable ignored3) { }
-                            }
-                        }
-                    }
-                } catch (Throwable ignored) { }
-            }
-        } catch (Throwable ignored) { }
-        return null;
-    }
+    // server-based playtime: handled via network requests to authoritative server-side tracker
 
     private void initPanelButtons() {
         // All buttons on left panel
@@ -429,7 +376,8 @@ public class GuiIngameMenuYauseBox extends GuiIngameMenu {
         int borderAlpha = Math.round(255 * openProgress);
         int borderColor = (borderAlpha << 24) | 0xFFFFFF;
         // Extend the white left border up to the top to match the background fill above
-        drawRect(boxX, 0, boxX + 2, boxY + boxHeight, borderColor); // Left border
+        // Very thin white left border — 1px as requested
+        drawRect(boxX, 0, boxX + 1, boxY + boxHeight, borderColor); // Left border (1px)
 
         // Subtle shadow to the right for visual polish (small, faded, and follows open progress)
         int shadowAlpha = Math.round(24 * openProgress); // gentle shadow
@@ -483,34 +431,26 @@ public class GuiIngameMenuYauseBox extends GuiIngameMenu {
         // delta (derived from elapsed milliseconds) so the UI updates smoothly and
         // doesn't wait for an explicit server/stat sync to show movement.
         if (YauseMenuConfig.showPlaytime && this.mc.player != null) {
-            long baseTicks = (this.cachedVanillaPlayTicks == null) ? -1L : this.cachedVanillaPlayTicks.longValue();
-            long nowMs = net.minecraft.client.Minecraft.getSystemTime();
-            // Convert ms delta into ticks (1 tick ≈ 50ms). Use rounding so small
-            // fractional deltas don't cause consistent off-by-one negatives.
-            long extraTicks = (this.lastVanillaReadMs > 0L) ? Math.max(0L, Math.round((nowMs - this.lastVanillaReadMs) / 50.0D)) : 0L;
+            // Only display server-provided playtime. The server must have the mod installed
+            // and respond to our RequestPlaytimeMessage for this to show up.
+            if (ClientPlaytimeCache.hasPlaytime()) {
+                long baseTicks = ClientPlaytimeCache.getPlayTicks();
+                long nowMs = net.minecraft.client.Minecraft.getSystemTime();
+                long lastMs = ClientPlaytimeCache.getLastReadMs();
+                // While the pause menu is open we must not advance the displayed counter
+                // by adding local simulated ticks — the display should be frozen until
+                // the player resumes playing.
+                long extraTicks = 0L;
+                long displayTicks = baseTicks + extraTicks;
+                if (displayTicks < this.lastDisplayedPlayTicks) displayTicks = this.lastDisplayedPlayTicks;
+                this.lastDisplayedPlayTicks = displayTicks;
 
-            // If we couldn't read a base stat yet (e.g. immediately after joining), try a best-effort read now.
-            if (baseTicks < 0L) {
-                Long attempt = getVanillaPlayTicks();
-                if (attempt != null) {
-                    baseTicks = attempt.longValue();
-                    this.cachedVanillaPlayTicks = attempt;
-                    this.lastVanillaReadMs = nowMs;
-                } else {
-                    baseTicks = 0L; // fallback while we wait for a valid stat
-                }
+                long playSeconds = displayTicks / 20L;
+                String playtimeStr = PlaytimeUtils.formatDurationSeconds(playSeconds);
+                int infoColor = ((int)(0xCC * openProgress) << 24) | 0x999999;
+                int playY = infoStartY + (drewFTB ? (this.fontRenderer.FONT_HEIGHT + 4) : 0);
+                this.fontRenderer.drawStringWithShadow("Time played: " + playtimeStr.replace("Playtime: ", ""), infoX, playY, infoColor);
             }
-
-            long displayTicks = baseTicks + extraTicks;
-            // Prevent the displayed value from ever going backwards due to read timing or rounding.
-            if (displayTicks < this.lastDisplayedPlayTicks) displayTicks = this.lastDisplayedPlayTicks;
-            this.lastDisplayedPlayTicks = displayTicks;
-
-            long playSeconds = displayTicks / 20L; // vanilla stat stores ticks
-            String playtimeStr = com.theyausebox.yause.utils.PlaytimeUtils.formatDurationSeconds(playSeconds);
-            int infoColor = ((int)(0xCC * openProgress) << 24) | 0x999999;
-            int playY = infoStartY + (drewFTB ? (this.fontRenderer.FONT_HEIGHT + 4) : 0);
-            this.fontRenderer.drawStringWithShadow("Time played: " + playtimeStr.replace("Playtime: ", ""), infoX, playY, infoColor);
         }
 
         // When FTBU isn't installed and the playtime feature is enabled, show a short
@@ -624,9 +564,12 @@ public class GuiIngameMenuYauseBox extends GuiIngameMenu {
     public void onGuiClosed() {
         // Release cached values to free small amounts of memory (strings, boxed Longs)
         this.cachedFTBText = null;
-        // Clear cached vanilla playtime so the next open reads fresh
-        this.cachedVanillaPlayTicks = null;
-        this.lastVanillaReadMs = 0L;
+        // inform the server we're no longer paused so the server resumes counting
+        if (this.serverPauseNotified && NetworkHandler.get() != null) {
+            try { NetworkHandler.get().sendToServer(new com.theyausebox.yause.network.PauseStateMessage(false)); } catch (Throwable ignore) {}
+            this.serverPauseNotified = false;
+        }
+        // Leave client server-playtime cache intact — next open will re-request server value.
         super.onGuiClosed();
     }
 
@@ -637,13 +580,17 @@ public class GuiIngameMenuYauseBox extends GuiIngameMenu {
         // Increment session tick counter while pause menu is open so playtime updates in real-time.
         // Only increment when the game is not paused (so we don't add ticks during single-player pause).
         if (YauseMenuConfig.showPlaytime && this.mc.player != null) {
-            // Refresh the cached vanilla stat while the pause menu
-            // is open so the displayed value updates in near real-time.
-            // Check more frequently (500ms) to reduce visible lag vs the vanilla stats screen.
+            // Periodically re-request server playtime while the pause menu is open.
+            // This refresh rate is intentionally low (5s) to reduce network noise.
             long now = net.minecraft.client.Minecraft.getSystemTime();
-            if (now - this.lastVanillaReadMs >= 500L) {
-                this.cachedVanillaPlayTicks = getVanillaPlayTicks();
-                this.lastVanillaReadMs = now;
+            long lastMs = ClientPlaytimeCache.getLastReadMs();
+            if ((lastMs < 0L && !this.serverPlaytimeRequested) || (lastMs > 0L && now - lastMs >= 5000L)) {
+                try {
+                    if (NetworkHandler.get() != null) {
+                        NetworkHandler.get().sendToServer(new RequestPlaytimeMessage());
+                        this.serverPlaytimeRequested = true;
+                    }
+                } catch (Throwable ignore) { }
             }
         }
 
