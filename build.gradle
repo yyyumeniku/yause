@@ -492,3 +492,62 @@ idea.project.settings {
 
 apply from: 'gradle/scripts/publishing.gradle'
 apply from: 'gradle/scripts/extra.gradle'
+
+// Developer convenience: automatically copy built mod JAR(s) to a local instance's mods folder
+// Usage: you can override the destination with -PinstanceModsPath="/path/to/.minecraft/mods"
+def instanceModsPathStr = project.hasProperty('instanceModsPath') ? property('instanceModsPath') : '/Users/gabriel/Library/Application Support/PrismLauncher/instances/1.12.2 TEST/.minecraft/mods'
+def instanceModsDir = file(instanceModsPathStr)
+
+tasks.register('installToInstanceMods', Copy) {
+    group = 'installation'
+    description = 'Copy built mod JAR(s) to the specified instance mods folder (developer convenience).'
+
+    // copy only the *base* mod JAR (avoid copying -sources, -javadoc or -dev classifier jars)
+    from("${buildDir}/libs") {
+        include "${base.archivesName.get()}*.jar"
+        // exclude common classifier/jar types we don't want in the instance mods folder
+        exclude "*-sources.jar", "*-javadoc.jar", "*-dev.jar", "*-sources-*.jar", "*-javadoc-*.jar", "*-dev-*.jar"
+    }
+    into instanceModsDir
+
+    doFirst {
+        if (!instanceModsDir.exists()) {
+            logger.lifecycle("installToInstanceMods: destination does not exist, creating: ${instanceModsDir}")
+            instanceModsDir.mkdirs()
+        }
+    }
+
+    doLast {
+        logger.lifecycle("installToInstanceMods: copied build artifacts to ${instanceModsDir}")
+    }
+}
+
+// Run the installation task automatically after a successful 'build'.
+tasks.named('build') {
+    finalizedBy 'installToInstanceMods'
+}
+
+// Convenience task to fetch the latest logs from a developer instance for diagnosis.
+// Usage: ./gradlew fetchInstanceLogs
+// Override default instanceLogsPath with -PinstanceLogsPath="/path/to/.minecraft/logs"
+def instanceLogsPathStr = project.hasProperty('instanceLogsPath') ? property('instanceLogsPath') : '/Users/gabriel/Library/Application Support/PrismLauncher/instances/1.12.2 TEST/.minecraft/logs'
+def instanceLogsDir = file(instanceLogsPathStr)
+def instanceLogsOut = file("${buildDir}/instance-logs")
+
+tasks.register('fetchInstanceLogs', Copy) {
+    group = 'diagnostics'
+    description = 'Copy latest.log and debug.log from a local instance logs folder into build/instance-logs for inspection.'
+    onlyIf { instanceLogsDir.exists() }
+    from(instanceLogsDir) {
+        include 'latest.log'
+        include 'debug.log'
+        include 'debug-*.log.gz'
+    }
+    into instanceLogsOut
+    doFirst {
+        instanceLogsOut.mkdirs()
+    }
+    doLast {
+        logger.lifecycle("fetchInstanceLogs: copied logs from ${instanceLogsDir} -> ${instanceLogsOut}")
+    }
+}
