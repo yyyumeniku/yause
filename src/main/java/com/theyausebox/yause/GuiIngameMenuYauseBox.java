@@ -543,7 +543,7 @@ public class GuiIngameMenuYauseBox extends GuiIngameMenu {
         super.updateScreen();
         ++this.updateCounter;
 
-        if (this.openStartTimeMs >= 0 && !this.isClosing && this.mc.player != null) {
+        if (YauseMenuConfig.showPlaytime && this.mc.player != null) {
 
             long now = net.minecraft.client.Minecraft.getSystemTime();
             if (now - this.lastVanillaReadMs >= 1000L) {
