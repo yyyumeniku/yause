@@ -431,14 +431,16 @@ public class GuiIngameMenuYauseBox extends GuiIngameMenu {
         }
 
         if (YauseMenuConfig.showPlaytime && this.mc.player != null) {
-            Long ticks = this.cachedVanillaPlayTicks;
-            if (ticks != null) {
-                long playSeconds = ticks / 20L;
-                String playtimeStr = formatPlaytime(playSeconds);
-                int infoColor = ((int)(0xCC * openProgress) << 24) | 0x999999;
-                int playY = infoStartY + (drewFTB ? (this.fontRenderer.FONT_HEIGHT + 4) : 0);
-                this.fontRenderer.drawStringWithShadow("Time played: " + playtimeStr.replace("Playtime: ", ""), infoX, playY, infoColor);
-            }
+            long baseTicks = (this.cachedVanillaPlayTicks == null) ? 0L : this.cachedVanillaPlayTicks.longValue();
+            long nowMs = net.minecraft.client.Minecraft.getSystemTime();
+            long extraTicks = (this.lastVanillaReadMs > 0L) ? Math.max(0L, (nowMs - this.lastVanillaReadMs) / 50L) : 0L;
+            long displayTicks = baseTicks + extraTicks;
+
+            long playSeconds = displayTicks / 20L;
+            String playtimeStr = formatPlaytime(playSeconds);
+            int infoColor = ((int)(0xCC * openProgress) << 24) | 0x999999;
+            int playY = infoStartY + (drewFTB ? (this.fontRenderer.FONT_HEIGHT + 4) : 0);
+            this.fontRenderer.drawStringWithShadow("Time played: " + playtimeStr.replace("Playtime: ", ""), infoX, playY, infoColor);
         }
 
         if (this.buttonPanelLeft != null) {
