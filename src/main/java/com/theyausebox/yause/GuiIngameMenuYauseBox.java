@@ -23,7 +23,8 @@ public class GuiIngameMenuYauseBox extends GuiIngameMenu {
     private int closeDurationMs = com.theyausebox.yause.config.YauseMenuConfig.closeAnimationMs;
 
     private Long cachedVanillaPlayTicks = null;
-    private long lastVanillaReadMs = 0L;
+    private long lastVanillaReadMs = -1L;
+    private long lastDisplayedPlayTicks = -1L;
 
     private String cachedFTBText = null;
     private boolean cachedFTBHasActive = false;
@@ -73,9 +74,12 @@ public class GuiIngameMenuYauseBox extends GuiIngameMenu {
         this.closeDurationMs = com.theyausebox.yause.config.YauseMenuConfig.closeAnimationMs;
 
         this.cachedVanillaPlayTicks = null;
-        this.lastVanillaReadMs = net.minecraft.client.Minecraft.getSystemTime();
+        this.lastVanillaReadMs = -1L;
         if (YauseMenuConfig.showPlaytime && this.mc != null && this.mc.player != null) {
             this.cachedVanillaPlayTicks = getVanillaPlayTicks();
+            if (this.cachedVanillaPlayTicks != null) {
+                this.lastVanillaReadMs = net.minecraft.client.Minecraft.getSystemTime();
+            }
         }
 
         if (YauseMenuConfig.enableQuests && com.theyausebox.yause.YauseMenu.ftbQuestsInstalled) {
@@ -431,13 +435,27 @@ public class GuiIngameMenuYauseBox extends GuiIngameMenu {
         }
 
         if (YauseMenuConfig.showPlaytime && this.mc.player != null) {
-            long baseTicks = (this.cachedVanillaPlayTicks == null) ? 0L : this.cachedVanillaPlayTicks.longValue();
+            long baseTicks = (this.cachedVanillaPlayTicks == null) ? -1L : this.cachedVanillaPlayTicks.longValue();
             long nowMs = net.minecraft.client.Minecraft.getSystemTime();
-            long extraTicks = (this.lastVanillaReadMs > 0L) ? Math.max(0L, (nowMs - this.lastVanillaReadMs) / 50L) : 0L;
+            long extraTicks = (this.lastVanillaReadMs > 0L) ? Math.max(0L, Math.round((nowMs - this.lastVanillaReadMs) / 50.0D)) : 0L;
+
+            if (baseTicks < 0L) {
+                Long attempt = getVanillaPlayTicks();
+                if (attempt != null) {
+                    baseTicks = attempt.longValue();
+                    this.cachedVanillaPlayTicks = attempt;
+                    this.lastVanillaReadMs = nowMs;
+                } else {
+                    baseTicks = 0L;
+                }
+            }
+
             long displayTicks = baseTicks + extraTicks;
+            if (displayTicks < this.lastDisplayedPlayTicks) displayTicks = this.lastDisplayedPlayTicks;
+            this.lastDisplayedPlayTicks = displayTicks;
 
             long playSeconds = displayTicks / 20L;
-            String playtimeStr = formatPlaytime(playSeconds);
+            String playtimeStr = com.theyausebox.yause.utils.PlaytimeUtils.formatDurationSeconds(playSeconds);
             int infoColor = ((int)(0xCC * openProgress) << 24) | 0x999999;
             int playY = infoStartY + (drewFTB ? (this.fontRenderer.FONT_HEIGHT + 4) : 0);
             this.fontRenderer.drawStringWithShadow("Time played: " + playtimeStr.replace("Playtime: ", ""), infoX, playY, infoColor);
@@ -548,7 +566,7 @@ public class GuiIngameMenuYauseBox extends GuiIngameMenu {
         if (YauseMenuConfig.showPlaytime && this.mc.player != null) {
 
             long now = net.minecraft.client.Minecraft.getSystemTime();
-            if (now - this.lastVanillaReadMs >= 1000L) {
+            if (now - this.lastVanillaReadMs >= 500L) {
                 this.cachedVanillaPlayTicks = getVanillaPlayTicks();
                 this.lastVanillaReadMs = now;
             }
