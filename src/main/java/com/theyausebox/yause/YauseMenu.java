@@ -14,8 +14,6 @@ import net.minecraftforge.fml.common.Loader;
     modid = YauseMenu.MODID,
     name = YauseMenu.NAME,
     version = YauseMenu.VERSION,
-    clientSideOnly = true,
-
     dependencies = "after:ftbutilities",
     guiFactory = "com.theyausebox.yause.config.YauseMenuGuiFactory"
 )
@@ -61,7 +59,7 @@ public class YauseMenu {
 
             if (!ftbUtilitiesInstalled) {
 
-                LOGGER.info("FTB Utilities (ftbutilities) not found — FTBU-only playtime display will be disabled.");
+                LOGGER.debug("FTB Utilities (ftbutilities) not found — FTBU-only playtime display will be disabled.");
         }
         proxy.postInit(event);
     }

@@ -10,6 +10,10 @@ import net.minecraft.client.gui.GuiShareToLan;
 import net.minecraft.client.gui.advancements.GuiScreenAdvancements;
 import net.minecraft.client.resources.I18n;
 import com.theyausebox.yause.config.YauseMenuConfig;
+import com.theyausebox.yause.network.NetworkHandler;
+import com.theyausebox.yause.network.RequestPlaytimeMessage;
+import com.theyausebox.yause.client.ClientPlaytimeCache;
+import com.theyausebox.yause.utils.PlaytimeUtils;
 
 public class GuiIngameMenuYauseBox extends GuiIngameMenu {
     private GuiButtonPanel buttonPanelLeft;
@@ -22,8 +26,9 @@ public class GuiIngameMenuYauseBox extends GuiIngameMenu {
     private long closeStartTimeMs = -1;
     private int closeDurationMs = com.theyausebox.yause.config.YauseMenuConfig.closeAnimationMs;
 
-    private Long cachedVanillaPlayTicks = null;
-    private long lastVanillaReadMs = -1L;
+    private boolean serverPlaytimeRequested = false;
+    private boolean serverPauseNotified = false;
+
     private long lastDisplayedPlayTicks = -1L;
 
     private String cachedFTBText = null;
@@ -73,12 +78,19 @@ public class GuiIngameMenuYauseBox extends GuiIngameMenu {
         this.openDurationMs = com.theyausebox.yause.config.YauseMenuConfig.openAnimationMs;
         this.closeDurationMs = com.theyausebox.yause.config.YauseMenuConfig.closeAnimationMs;
 
-        this.cachedVanillaPlayTicks = null;
-        this.lastVanillaReadMs = -1L;
-        if (YauseMenuConfig.showPlaytime && this.mc != null && this.mc.player != null) {
-            this.cachedVanillaPlayTicks = getVanillaPlayTicks();
-            if (this.cachedVanillaPlayTicks != null) {
-                this.lastVanillaReadMs = net.minecraft.client.Minecraft.getSystemTime();
+        this.serverPlaytimeRequested = false;
+        this.lastDisplayedPlayTicks = -1L;
+
+        if (YauseMenuConfig.showPlaytime && this.mc != null && this.mc.player != null && NetworkHandler.get() != null) {
+            try {
+                NetworkHandler.get().sendToServer(new RequestPlaytimeMessage());
+                this.serverPlaytimeRequested = true;
+                try {
+                    NetworkHandler.get().sendToServer(new com.theyausebox.yause.network.PauseStateMessage(true));
+                    this.serverPauseNotified = true;
+                } catch (Throwable ignore) { }
+            } catch (Throwable ignore) {
+
             }
         }
 
@@ -200,64 +212,6 @@ public class GuiIngameMenuYauseBox extends GuiIngameMenu {
                 com.theyausebox.yause.YauseMenu.LOGGER.warn("FTB Quests reflection failed while reading quests: {}", msg);
             }
         }
-    }
-
-    private Long getVanillaPlayTicks() {
-        try {
-            if (this.mc == null || this.mc.player == null) return null;
-            net.minecraft.stats.StatBase stat = net.minecraft.stats.StatList.PLAY_ONE_MINUTE;
-            if (stat == null) return null;
-
-            try {
-                Object statsManagerDirect = this.mc.player.getStatFileWriter();
-                if (statsManagerDirect != null) {
-                    try {
-                        java.lang.reflect.Method readStat = statsManagerDirect.getClass().getMethod("readStat", net.minecraft.stats.StatBase.class);
-                        Object val = readStat.invoke(statsManagerDirect, stat);
-                        if (val instanceof Number) return ((Number) val).longValue();
-                        if (val != null) return Long.parseLong(val.toString());
-                    } catch (NoSuchMethodException | IllegalAccessException | java.lang.reflect.InvocationTargetException e) {
-
-                    }
-                }
-            } catch (Throwable ignored) {
-
-            }
-
-            Object statsManager = null;
-            try {
-
-                java.lang.reflect.Field f = this.mc.player.getClass().getDeclaredField("statFileWriter");
-                f.setAccessible(true);
-                statsManager = f.get(this.mc.player);
-            } catch (Throwable ignored2) { }
-
-            if (statsManager == null) return null;
-
-            if (statsManager != null) {
-                try {
-                    java.lang.reflect.Method readStat = statsManager.getClass().getMethod("readStat", net.minecraft.stats.StatBase.class);
-                    Object val = readStat.invoke(statsManager, stat);
-                    if (val instanceof Number) return ((Number) val).longValue();
-                    if (val != null) return Long.parseLong(val.toString());
-                } catch (NoSuchMethodException e) {
-
-                    for (java.lang.reflect.Method m : statsManager.getClass().getMethods()) {
-                        if (m.getParameterCount() == 1) {
-                            Class<?> p = m.getParameterTypes()[0];
-                            if (p == net.minecraft.stats.StatBase.class || p.getName().toLowerCase().contains("stat")) {
-                                try {
-                                    Object val = m.invoke(statsManager, stat);
-                                    if (val instanceof Number) return ((Number) val).longValue();
-                                    if (val != null) return Long.parseLong(val.toString());
-                                } catch (Throwable ignored3) { }
-                            }
-                        }
-                    }
-                } catch (Throwable ignored) { }
-            }
-        } catch (Throwable ignored) { }
-        return null;
     }
 
     private void initPanelButtons() {
@@ -390,7 +344,7 @@ public class GuiIngameMenuYauseBox extends GuiIngameMenu {
         int borderAlpha = Math.round(255 * openProgress);
         int borderColor = (borderAlpha << 24) | 0xFFFFFF;
 
-        drawRect(boxX, 0, boxX + 2, boxY + boxHeight, borderColor);
+        drawRect(boxX, 0, boxX + 1, boxY + boxHeight, borderColor);
 
         int shadowAlpha = Math.round(24 * openProgress);
         if (shadowAlpha > 0) {
@@ -435,30 +389,23 @@ public class GuiIngameMenuYauseBox extends GuiIngameMenu {
         }
 
         if (YauseMenuConfig.showPlaytime && this.mc.player != null) {
-            long baseTicks = (this.cachedVanillaPlayTicks == null) ? -1L : this.cachedVanillaPlayTicks.longValue();
-            long nowMs = net.minecraft.client.Minecraft.getSystemTime();
-            long extraTicks = (this.lastVanillaReadMs > 0L) ? Math.max(0L, Math.round((nowMs - this.lastVanillaReadMs) / 50.0D)) : 0L;
 
-            if (baseTicks < 0L) {
-                Long attempt = getVanillaPlayTicks();
-                if (attempt != null) {
-                    baseTicks = attempt.longValue();
-                    this.cachedVanillaPlayTicks = attempt;
-                    this.lastVanillaReadMs = nowMs;
-                } else {
-                    baseTicks = 0L;
-                }
+            if (ClientPlaytimeCache.hasPlaytime()) {
+                long baseTicks = ClientPlaytimeCache.getPlayTicks();
+                long nowMs = net.minecraft.client.Minecraft.getSystemTime();
+                long lastMs = ClientPlaytimeCache.getLastReadMs();
+
+                long extraTicks = 0L;
+                long displayTicks = baseTicks + extraTicks;
+                if (displayTicks < this.lastDisplayedPlayTicks) displayTicks = this.lastDisplayedPlayTicks;
+                this.lastDisplayedPlayTicks = displayTicks;
+
+                long playSeconds = displayTicks / 20L;
+                String playtimeStr = PlaytimeUtils.formatDurationSeconds(playSeconds);
+                int infoColor = ((int)(0xCC * openProgress) << 24) | 0x999999;
+                int playY = infoStartY + (drewFTB ? (this.fontRenderer.FONT_HEIGHT + 4) : 0);
+                this.fontRenderer.drawStringWithShadow("Time played: " + playtimeStr.replace("Playtime: ", ""), infoX, playY, infoColor);
             }
-
-            long displayTicks = baseTicks + extraTicks;
-            if (displayTicks < this.lastDisplayedPlayTicks) displayTicks = this.lastDisplayedPlayTicks;
-            this.lastDisplayedPlayTicks = displayTicks;
-
-            long playSeconds = displayTicks / 20L;
-            String playtimeStr = com.theyausebox.yause.utils.PlaytimeUtils.formatDurationSeconds(playSeconds);
-            int infoColor = ((int)(0xCC * openProgress) << 24) | 0x999999;
-            int playY = infoStartY + (drewFTB ? (this.fontRenderer.FONT_HEIGHT + 4) : 0);
-            this.fontRenderer.drawStringWithShadow("Time played: " + playtimeStr.replace("Playtime: ", ""), infoX, playY, infoColor);
         }
 
         if (this.buttonPanelLeft != null) {
@@ -553,8 +500,11 @@ public class GuiIngameMenuYauseBox extends GuiIngameMenu {
 
         this.cachedFTBText = null;
 
-        this.cachedVanillaPlayTicks = null;
-        this.lastVanillaReadMs = 0L;
+        if (this.serverPauseNotified && NetworkHandler.get() != null) {
+            try { NetworkHandler.get().sendToServer(new com.theyausebox.yause.network.PauseStateMessage(false)); } catch (Throwable ignore) {}
+            this.serverPauseNotified = false;
+        }
+
         super.onGuiClosed();
     }
 
@@ -566,9 +516,14 @@ public class GuiIngameMenuYauseBox extends GuiIngameMenu {
         if (YauseMenuConfig.showPlaytime && this.mc.player != null) {
 
             long now = net.minecraft.client.Minecraft.getSystemTime();
-            if (now - this.lastVanillaReadMs >= 500L) {
-                this.cachedVanillaPlayTicks = getVanillaPlayTicks();
-                this.lastVanillaReadMs = now;
+            long lastMs = ClientPlaytimeCache.getLastReadMs();
+            if ((lastMs < 0L && !this.serverPlaytimeRequested) || (lastMs > 0L && now - lastMs >= 5000L)) {
+                try {
+                    if (NetworkHandler.get() != null) {
+                        NetworkHandler.get().sendToServer(new RequestPlaytimeMessage());
+                        this.serverPlaytimeRequested = true;
+                    }
+                } catch (Throwable ignore) { }
             }
         }
 
